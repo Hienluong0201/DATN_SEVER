@@ -1,0 +1,694 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+bin/
+  www
+middlewares/
+  upload.js
+models/
+  Address.js
+  Cart.js
+  Category.js
+  Image.js
+  index.js
+  Order.js
+  OrderDetail.js
+  Payment.js
+  Product.js
+  ProductVariant.js
+  Review.js
+  User.js
+  Wishlist.js
+public/
+  stylesheets/
+    style.css
+routes/
+  index.js
+  users.js
+utils/
+  cloudinary.js
+views/
+  error.hbs
+  index.hbs
+  layout.hbs
+.gitignore
+package.json
+README.md
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="bin/www">
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+
+var app = require('../app');
+var debug = require('debug')('api-duantotnghiep:server');
+var http = require('http');
+
+/**
+ * Get port from environment and store in Express.
+ */
+
+var port = normalizePort(process.env.PORT || '3000');
+app.set('port', port);
+
+/**
+ * Create HTTP server.
+ */
+
+var server = http.createServer(app);
+
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+
+server.listen(port);
+server.on('error', onError);
+server.on('listening', onListening);
+
+/**
+ * Normalize a port into a number, string, or false.
+ */
+
+function normalizePort(val) {
+  var port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+
+function onError(error) {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  var bind = typeof port === 'string'
+    ? 'Pipe ' + port
+    : 'Port ' + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      console.error(bind + ' requires elevated privileges');
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(bind + ' is already in use');
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+
+function onListening() {
+  var addr = server.address();
+  var bind = typeof addr === 'string'
+    ? 'pipe ' + addr
+    : 'port ' + addr.port;
+  debug('Listening on ' + bind);
+}
+</file>
+
+<file path="middlewares/upload.js">
+// middlewares/upload.js
+const multer = require('multer');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('../utils/cloudinary');
+
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'user_avatars', // thư mục trong Cloudinary
+    allowed_formats: ['jpg', 'jpeg', 'png'],
+  },
+});
+
+const upload = multer({ storage });
+
+module.exports = upload;
+</file>
+
+<file path="models/Address.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const AddressSchema = new Schema({
+  userID: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  address: { type: String, required: true },
+  isDefault: { type: Boolean, default: false },
+  name: { type: String, required: true },
+  sdt: { type: String, required: true }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Address', AddressSchema);
+</file>
+
+<file path="models/Cart.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const CartSchema = new Schema({
+  userID: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  productVariant: { type: Schema.Types.ObjectId, ref: 'ProductVariant', required: true },
+  soluong: { type: Number, required: true }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Cart', CartSchema);
+</file>
+
+<file path="models/Category.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const CategorySchema = new Schema({
+  name: { type: String, required: true },
+  description: { type: String }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Category', CategorySchema);
+</file>
+
+<file path="models/index.js">
+const Category = require('./Category');
+const Image = require('./Image');
+const Product = require('./Product');
+const ProductVariant = require('./ProductVariant');
+const User = require('./User');
+const Address = require('./Address');
+const Review = require('./Review');
+const Wishlist = require('./Wishlist');
+const Cart = require('./Cart');
+const Payment = require('./Payment');
+const Order = require('./Order');
+const OrderDetail = require('./OrderDetail');
+
+module.exports = {
+  Category,
+  Image,
+  Product,
+  ProductVariant,
+  User,
+  Address,
+  Review,
+  Wishlist,
+  Cart,
+  Payment,
+  Order,
+  OrderDetail
+};
+</file>
+
+<file path="models/Order.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const OrderSchema = new Schema({
+  userID: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  paymentID: { type: Schema.Types.ObjectId, ref: 'Payment', required: true },
+  shippingAddress: { type: String, required: true },
+  orderStatus: { type: String, default: 'pending' },
+  orderDate: { type: Date, default: Date.now },
+  name: { type: String, required: true },
+  sdt: { type: String, required: true }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Order', OrderSchema);
+</file>
+
+<file path="models/OrderDetail.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const OrderDetailSchema = new Schema({
+  variantID: { type: Schema.Types.ObjectId, ref: 'ProductVariant', required: true },
+  orderID: { type: Schema.Types.ObjectId, ref: 'Order', required: true },
+  quantity: { type: Number, required: true },
+  price: { type: Number, required: true }
+}, { timestamps: true });
+
+module.exports = mongoose.model('OrderDetail', OrderDetailSchema);
+</file>
+
+<file path="models/Payment.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const PaymentSchema = new Schema({
+  paymentMethod: { type: String, required: true },
+  paymentGateway: { type: String },
+  status: { type: String, default: 'pending' },
+  createdAt: { type: Date, default: Date.now }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Payment', PaymentSchema);
+</file>
+
+<file path="models/Product.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const ProductSchema = new Schema({
+  categoryID: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
+  name: { type: String, required: true },
+  description: { type: String },
+  price: { type: Number, required: true }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Product', ProductSchema);
+</file>
+
+<file path="models/ProductVariant.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const ProductVariantSchema = new Schema({
+  productID: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+  size: { type: String },
+  color: { type: String },
+  stock: { type: Number, required: true }
+}, { timestamps: true });
+
+module.exports = mongoose.model('ProductVariant', ProductVariantSchema);
+</file>
+
+<file path="models/Review.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const ReviewSchema = new Schema({
+  userID: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  productID: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+  rating: { type: Number, required: true },
+  comment: { type: String },
+  reviewDate: { type: Date, default: Date.now },
+  status: { type: String, default: 'pending' }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Review', ReviewSchema);
+</file>
+
+<file path="models/User.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const UserSchema = new Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  phone: { type: String },
+  img: { type: String },
+  role: { type: String, default: 'user' },
+  isActive: { type: Boolean, default: true },
+  resetPasswordCode: String,      
+  resetPasswordExpires: Date       
+}, { timestamps: true });
+
+module.exports = mongoose.model('User', UserSchema);
+</file>
+
+<file path="models/Wishlist.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const WishlistSchema = new Schema({
+  userID: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  productID: { type: Schema.Types.ObjectId, ref: 'Product', required: true }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Wishlist', WishlistSchema);
+</file>
+
+<file path="public/stylesheets/style.css">
+body {
+  padding: 50px;
+  font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
+}
+
+a {
+  color: #00B7FF;
+}
+</file>
+
+<file path="routes/index.js">
+var express = require('express');
+var router = express.Router();
+
+/* GET home page. */
+router.get('/', function(req, res, next) {
+  res.render('index', { title: 'Express' });
+});
+
+module.exports = router;
+</file>
+
+<file path="routes/users.js">
+const express = require('express');
+const router = express.Router();
+const nodemailer = require('nodemailer');
+const bcrypt = require('bcryptjs');
+const User = require('../models/User');
+require('dotenv').config();
+const multer = require('multer');
+const fs = require('fs');
+const cloudinary = require('../utils/cloudinary');
+const sharp = require('sharp');
+
+// Cấu hình multer upload file tạm vào thư mục 'uploads/'
+const upload = multer({ dest: 'uploads/' });
+
+// Nodemailer config
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true, // SSL
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
+// Đăng ký user mới (name, email, password)
+router.post('/register', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    if (!name || !email || !password)
+      return res.status(400).json({ message: 'Vui lòng nhập đầy đủ name, email và password' });
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser)
+      return res.status(409).json({ message: 'Email đã được sử dụng' });
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const user = new User({ name, email, password: hashedPassword, isActive: true });
+    const savedUser = await user.save();
+
+    res.status(201).json(savedUser);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+});
+
+// Đăng nhập (email, password) và kiểm tra isActive
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password)
+      return res.status(400).json({ message: 'Vui lòng nhập email và password' });
+
+    const user = await User.findOne({ email });
+    if (!user)
+      return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng' });
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch)
+      return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng' });
+
+    if (!user.isActive)
+      return res.status(403).json({ message: 'Tài khoản đã bị khóa, vui lòng liên hệ quản trị viên' });
+
+    res.json({ message: 'Đăng nhập thành công', user });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+});
+
+// Gửi mã quên mật khẩu về email
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email)
+      return res.status(400).json({ message: 'Vui lòng nhập email' });
+
+    const user = await User.findOne({ email });
+    if (!user)
+      return res.status(404).json({ message: 'Email không tồn tại' });
+
+    // Tạo mã 6 số ngẫu nhiên
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    user.resetPasswordCode = code;
+    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // 15 phút
+    await user.save();
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Mã xác thực quên mật khẩu',
+      text: `Mã xác thực của bạn là: ${code}. Mã có hiệu lực trong 15 phút.`
+    });
+
+    res.json({ message: 'Mã xác thực đã được gửi đến email' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+});
+
+// Xác thực mã và đổi mật khẩu mới
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword)
+      return res.status(400).json({ message: 'Thiếu thông tin cần thiết' });
+
+    const user = await User.findOne({ email });
+    if (!user)
+      return res.status(404).json({ message: 'Email không tồn tại' });
+
+    if (
+      user.resetPasswordCode !== code ||
+      !user.resetPasswordExpires ||
+      user.resetPasswordExpires < Date.now()
+    ) {
+      return res.status(400).json({ message: 'Mã xác thực không hợp lệ hoặc đã hết hạn' });
+    }
+
+    // Mã hóa password mới
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    user.password = hashedPassword;
+    user.resetPasswordCode = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    res.json({ message: 'Đổi mật khẩu thành công' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+});
+
+// Cập nhật user (name, password, phone, img)
+router.put('/update/:id', upload.single('img'), async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { name, password, phone } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user)
+      return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+
+    const updateFields = {};
+    if (name) updateFields.name = name;
+    if (phone) updateFields.phone = phone;
+
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      updateFields.password = await bcrypt.hash(password, salt);
+    }
+
+    if (req.file) {
+      const originalPath = req.file.path;
+      const compressedPath = originalPath + '_compressed.jpg';
+      const start = Date.now();
+      await sharp(originalPath)
+        .resize(600)
+        .jpeg({ quality: 30 })
+        .toFile(compressedPath);
+      console.log('Sharp processing time:', Date.now() - start, 'ms');
+    
+      const result = await cloudinary.uploader.upload(compressedPath, {
+        folder: 'user_images',
+        use_filename: true,
+      });
+    
+      fs.unlinkSync(originalPath);
+      fs.unlinkSync(compressedPath);
+    
+      updateFields.img = result.secure_url;
+    }
+    
+    const updatedUser = await User.findByIdAndUpdate(userId, updateFields, { new: true });
+    res.json({ message: 'Cập nhật thành công', user: updatedUser });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+});
+module.exports = router;
+</file>
+
+<file path="utils/cloudinary.js">
+// utils/cloudinary.js
+const cloudinary = require('cloudinary').v2;
+const dotenv = require('dotenv');
+dotenv.config();
+
+cloudinary.config({
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_API_KEY,
+  api_secret: process.env.CLOUD_API_SECRET,
+});
+
+module.exports = cloudinary;
+</file>
+
+<file path="views/error.hbs">
+<h1>{{message}}</h1>
+<h2>{{error.status}}</h2>
+<pre>{{error.stack}}</pre>
+</file>
+
+<file path="views/index.hbs">
+<h1>{{title}}</h1>
+<p>Welcome to {{title}}</p>
+</file>
+
+<file path="views/layout.hbs">
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>{{title}}</title>
+    <link rel='stylesheet' href='/stylesheets/style.css' />
+  </head>
+  <body>
+    {{{body}}}
+  </body>
+</html>
+</file>
+
+<file path=".gitignore">
+.env
+</file>
+
+<file path="package.json">
+{
+  "name": "api-duantotnghiep",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node ./bin/www",
+    "dev": "nodemon ./bin/www"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cloudinary": "^2.6.1",
+    "cookie-parser": "~1.4.4",
+    "debug": "~2.6.9",
+    "dotenv": "^16.5.0",
+    "express": "~4.16.1",
+    "hbs": "~4.0.4",
+    "http-errors": "~1.6.3",
+    "mongoose": "^8.15.0",
+    "morgan": "~1.9.1",
+    "multer": "^2.0.0",
+    "nodemailer": "^7.0.3",
+    "nodemon": "^3.1.10",
+    "sharp": "^0.34.1"
+  }
+}
+</file>
+
+<file path="README.md">
+# DATN_SEVER
+</file>
+
+<file path="models/Image.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const ImageSchema = new Schema({
+  productID: { 
+    type: Schema.Types.ObjectId, 
+    ref: 'Product', 
+    required: true 
+  },
+  imageURL: { 
+    type: [String], // Mảng các đường dẫn ảnh
+    required: true,
+    validate: {
+      validator: function(urls) {
+        // Đảm bảo mảng có ít nhất 1 phần tử
+        return urls && urls.length > 0;
+      },
+      message: 'Phải có ít nhất một đường dẫn ảnh'
+    }
+  }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Image', ImageSchema);
+</file>
+
+</files>

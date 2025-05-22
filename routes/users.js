@@ -46,6 +46,12 @@ router.post('/register', async (req, res) => {
   }
 });
 
+
+router.get('/login', (req, res) => {
+  res.render('login', { title: 'Đăng Nhập' });
+});
+
+
 // Đăng nhập (email, password) và kiểm tra isActive
 router.post('/login', async (req, res) => {
   try {
@@ -64,6 +70,7 @@ router.post('/login', async (req, res) => {
     if (!user.isActive)
       return res.status(403).json({ message: 'Tài khoản đã bị khóa, vui lòng liên hệ quản trị viên' });
 
+       req.session.userId = user._id;
     res.json({ message: 'Đăng nhập thành công', user });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
