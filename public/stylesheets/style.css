@@ -6,3 +6,33 @@ body {
 a {
   color: #00B7FF;
 }
+
+.admin-container, .login-container {
+  margin-top: 20px;
+}
+
+.admin-container ul, .login-container form {
+  list-style-type: none;
+  padding: 0;
+}
+
+.admin-container li, .login-container div {
+  margin: 10px 0;
+}
+
+.login-container input {
+  padding: 5px;
+  width: 200px;
+}
+
+.login-container button {
+  padding: 10px 20px;
+  background-color: #00B7FF;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.login-container button:hover {
+  background-color: #0099CC;
+}

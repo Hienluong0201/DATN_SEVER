@@ -8,9 +8,13 @@ var mongoose = require('mongoose');
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
 require('dotenv').config();
-
+var session = require('express-session');
 
 var app = express();
+
+// view engine setup
+app.set('views', path.join(__dirname, 'views'));
+app.set('view engine', 'hbs');
 
 // Kết nối MongoDB
 mongoose.connect('mongodb+srv://hienluong:hienluong123@cluster0.exwm8.mongodb.net/DATN_NHOM5')
@@ -26,6 +30,14 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Cấu hình session
+app.use(session({
+  secret: 'oke123', // Thay bằng một chuỗi bí mật mạnh hơn
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: false } // Đặt secure: true nếu dùng HTTPS
+}));
 
 app.use('/', indexRouter);
 app.use('/users', usersRouter);
