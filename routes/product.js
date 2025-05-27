@@ -6,12 +6,17 @@ const Product = require("../models/Product");
 // GET /api/products (lọc & sắp xếp)
 router.get("/", async (req, res) => {
   try {
-    const { categoryID, sort, page = 1, limit = 10 } = req.query;
+    const { categoryID, sort, page = 1, limit = 10, status } = req.query;
 
     let filter = {};
 
     if (categoryID && mongoose.Types.ObjectId.isValid(categoryID)) {
       filter.categoryID = new mongoose.Types.ObjectId(categoryID.trim());
+    }
+
+    // Lọc theo status nếu có
+    if (status !== undefined) {
+      filter.status = status === 'true';
     }
 
     let sortOption = {};
@@ -41,7 +46,7 @@ router.get("/", async (req, res) => {
 // POST /api/products (thêm sản phẩm)
 router.post("/", async (req, res) => {
   try {
-    const { categoryID, name, description, price } = req.body;
+    const { categoryID, name, description, price, status } = req.body;
 
     if (!categoryID || !name || !price) {
       return res.status(400).json({ message: "Thiếu dữ liệu cần thiết." });
@@ -52,6 +57,7 @@ router.post("/", async (req, res) => {
       name,
       description,
       price,
+      status,
     });
 
     await newProduct.save();
@@ -65,7 +71,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { categoryID, name, description, price } = req.body;
+    const { categoryID, name, description, price, status } = req.body;
 
     const product = await Product.findById(id);
     if (!product) return res.status(404).json({ message: "Không tìm thấy sản phẩm." });
@@ -74,6 +80,7 @@ router.put("/:id", async (req, res) => {
     if (name) product.name = name;
     if (description) product.description = description;
     if (price) product.price = price;
+    if (status !== undefined) product.status = status;
 
     await product.save();
     res.json(product);
