@@ -13,6 +13,12 @@ var categoryRouter = require('./routes/category');
 var addressRouter = require('./routes/adress');
 require('dotenv').config();
 var session = require('express-session');
+var wishlistRouter = require('./routes/wishlist');
+var cartRouter = require('./routes/cart');
+var orderRouter = require('./routes/order');
+var orderdetailRouter = require('./routes/orderdetail');
+
+
 
 var app = express();
 
@@ -49,6 +55,10 @@ app.use('/products', productsRouter);
 app.use('/category', categoryRouter);
 app.use('/adress', addressRouter);
 app.use('/img', imgsRouter);
+app.use('/wishlist', wishlistRouter);
+app.use('/cart', cartRouter);
+app.use('/order', orderRouter);
+app.use('/orderdetail', orderdetailRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
