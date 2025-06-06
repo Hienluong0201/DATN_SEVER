@@ -17,6 +17,7 @@ var wishlistRouter = require('./routes/wishlist');
 var cartRouter = require('./routes/cart');
 var orderRouter = require('./routes/order');
 var orderdetailRouter = require('./routes/orderdetail');
+var productvariantRouter = require('./routes/productvariant');
 
 
 
@@ -59,6 +60,7 @@ app.use('/wishlist', wishlistRouter);
 app.use('/cart', cartRouter);
 app.use('/order', orderRouter);
 app.use('/orderdetail', orderdetailRouter);
+app.use('/productvariant', productvariantRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
