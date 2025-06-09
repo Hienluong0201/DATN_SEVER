@@ -1,91 +1,158 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const router = express.Router();
-const Order = require("../models/Order");
-const Payment = require("../models/Payment");
 
+const Cart           = require("../models/Cart");
+const Order          = require("../models/Order");
+const OrderDetail    = require("../models/OrderDetail");
+const Payment        = require("../models/Payment");
+const ProductVariant = require("../models/ProductVariant");
 
-
-// Lấy tất cả đơn hàng
+// GET /order
+// → Lấy tất cả đơn, sort mới nhất, populate user & payment
 router.get("/", async (req, res) => {
   try {
     const orders = await Order.find()
       .populate("userID")
       .populate("paymentID")
       .sort({ createdAt: -1 });
-
     res.json(orders);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// Lấy đơn hàng theo userID
-router.get("/user/:userID", async (req, res) => {
+// GET /order/user/:userId
+// → Lấy tất cả đơn theo user, mới nhất trước
+router.get("/user/:userId", async (req, res) => {
   try {
-    const { userID } = req.params;
-    const orders = await Order.find({ userID })
+    const orders = await Order.find({ userID: req.params.userId })
       .populate("paymentID")
       .sort({ createdAt: -1 });
-
     res.json(orders);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// Lấy chi tiết đơn hàng theo ID
+// GET /order/:id
+// → Lấy chi tiết order (header) và cả items luôn
 router.get("/:id", async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
       .populate("userID")
       .populate("paymentID");
+    if (!order) return res.status(404).json({ message: "Không tìm thấy đơn." });
 
-    if (!order)
-      return res.status(404).json({ message: "Không tìm thấy đơn hàng." });
+    // Lấy luôn order details
+    const details = await OrderDetail.find({ orderID: order._id })
+      .populate({
+        path: "variantID",
+        populate: { path: "productID" }
+      });
 
-    res.json(order);
+    res.json({ order, details });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// Thêm đơn hàng mới
-router.post("/", async (req, res) => {
+/**
+ * POST /order/checkout
+ * Flow thanh toán:
+ *  - Tạo Payment
+ *  - Tạo Order
+ *  - Tạo OrderDetail
+ *  - Giảm stock
+ *  - Xóa những item đã thanh toán khỏi Cart
+ */
+router.post("/checkout", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
-    const { userID, paymentID, shippingAddress, orderStatus, name, sdt } = req.body;
+    const {
+      userID,
+      paymentInfo,      // { PaymentMethod, status, … }
+      shippingAddress,
+      orderStatus = "Paid",
+      name,
+      sdt,
+      items             // [{ variantID, quantity, price }, …]
+    } = req.body;
 
-    if (!userID || !paymentID || !shippingAddress || !name || !sdt) {
-      return res.status(400).json({ message: "Thiếu dữ liệu bắt buộc." });
+    // 1. Validate
+    if (!userID || !paymentInfo || !shippingAddress || !name || !sdt || !items?.length) {
+      return res.status(400).json({ message: "Thiếu dữ liệu bắt buộc hoặc items rỗng." });
     }
 
-    const newOrder = new Order({
+    // 2. Tạo Payment
+    const [newPayment] = await Payment.create([{
+      ...paymentInfo,
+      CreatedAt: new Date(),
+      userID
+    }], { session });
+
+    // 3. Tạo Order
+    const [newOrder] = await Order.create([{
       userID,
-      paymentID,
+      paymentID:       newPayment._id,
       shippingAddress,
       orderStatus,
       name,
-      sdt
-    });
+      sdt,
+      OrderDate:       new Date()
+    }], { session });
 
-    await newOrder.save();
-    res.status(201).json(newOrder);
+    // 4. Tạo OrderDetail
+    const detailsPayload = items.map(i => ({
+      orderID:    newOrder._id,
+      variantID:  i.variantID,
+      quantity:   i.quantity,
+      price:      i.price
+    }));
+    const newDetails = await OrderDetail.insertMany(detailsPayload, { session });
+
+    // 5. Giảm stock
+    for (const { variantID, quantity } of items) {
+      await ProductVariant.findByIdAndUpdate(
+        variantID,
+        { $inc: { stock: -quantity } },
+        { session }
+      );
+    }
+
+    // 6. Xóa khỏi Cart chỉ những variant đã mua
+    const variantIds = items.map(i => i.variantID);
+    await Cart.deleteMany(
+      { userID, productVariant: { $in: variantIds } },
+      { session }
+    );
+
+    // 7. Commit
+    await session.commitTransaction();
+    session.endSession();
+
+    // 8. Trả về client
+    res.status(201).json({
+      order:   newOrder,
+      payment: newPayment,
+      details: newDetails,
+      cart:    []      // frontend dùng để clear UI
+    });
   } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
     res.status(500).json({ message: err.message });
   }
 });
 
-// Cập nhật trạng thái đơn hàng
+// PUT /order/:id
+// → Cập nhật trạng thái đơn
 router.put("/:id", async (req, res) => {
   try {
-    const { orderStatus } = req.body;
-
     const order = await Order.findById(req.params.id);
-    if (!order)
-      return res.status(404).json({ message: "Không tìm thấy đơn hàng." });
-
-    if (orderStatus) order.orderStatus = orderStatus;
-
+    if (!order) return res.status(404).json({ message: "Không tìm thấy đơn." });
+    if (req.body.orderStatus) order.orderStatus = req.body.orderStatus;
     await order.save();
     res.json(order);
   } catch (err) {
@@ -93,15 +160,26 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// Xoá đơn hàng
+// DELETE /order/:id
+// → Xóa 1 order (và tùy bạn có muốn xóa detail kèm theo)
 router.delete("/:id", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
-    const order = await Order.findByIdAndDelete(req.params.id);
-    if (!order)
-      return res.status(404).json({ message: "Không tìm thấy đơn hàng." });
-
-    res.json({ message: "Đã xoá đơn hàng thành công." });
+    // Xóa OrderDetail trước
+    await OrderDetail.deleteMany({ orderID: req.params.id }, { session });
+    // Xóa Order
+    const order = await Order.findByIdAndDelete(req.params.id, { session });
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: "Không tìm thấy đơn." });
+    }
+    await session.commitTransaction();
+    session.endSession();
+    res.json({ message: "Đã xoá đơn và chi tiết thành công." });
   } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
     res.status(500).json({ message: err.message });
   }
 });
