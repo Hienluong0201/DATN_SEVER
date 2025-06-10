@@ -7,7 +7,7 @@ const ReviewSchema = new Schema({
   rating: { type: Number, required: true },
   comment: { type: String },
   reviewDate: { type: Date, default: Date.now },
-  status: { type: String, default: 'pending' }
+  status: { type: Boolean, default: 'True' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Review', ReviewSchema);
