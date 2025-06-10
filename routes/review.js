@@ -1,6 +1,7 @@
 // routes/review.js
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Review = require('../models/Review');
 
 // 1. Tạo mới một Review
@@ -114,5 +115,45 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+// GET /reviews/product/:productID/average-rating
+router.get('/product/:productID/average-rating', async (req, res) => {
+  try {
+    const { productID } = req.params;
+
+    // Kiểm tra ObjectId hợp lệ
+    if (!mongoose.Types.ObjectId.isValid(productID)) {
+      return res.status(400).json({ message: "productID không hợp lệ" });
+    }
+
+    const result = await Review.aggregate([
+      {
+        $match: {
+          productID: new mongoose.Types.ObjectId(productID),
+          status: true // chỉ tính review đã được duyệt
+        }
+      },
+      {
+        $group: {
+          _id: "$productID",
+          averageRating: { $avg: "$rating" },
+          totalReviews: { $sum: 1 }
+        }
+      }
+    ]);
+
+    if (result.length === 0) {
+      return res.json({ averageRating: 0, totalReviews: 0 });
+    }
+
+    res.json({
+      averageRating: Math.round(result[0].averageRating * 10) / 10, // Làm tròn 1 chữ số
+      totalReviews: result[0].totalReviews
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+
 
 module.exports = router;
