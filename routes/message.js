@@ -29,4 +29,16 @@ router.post('/', async (req, res) => {
   }
 });
 
+router.get('/between', async (req, res) => {
+  const { userID } = req.query;
+  if (!userID) return res.status(400).json({ message: 'Thiếu userID' });
+
+  // Lấy tin nhắn giữa user và admin (sender là 'user' hoặc 'admin')
+  const messages = await Message.find({
+    userID,
+    sender: { $in: ['user', 'admin'] }
+  }).sort({ timestamp: 1 });
+
+  res.json(messages);
+});
 module.exports = router;
