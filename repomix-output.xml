@@ -62,8 +62,19 @@ public/
   stylesheets/
     style.css
 routes/
+  adress.js
+  cart.js
+  category.js
+  Img.js
   index.js
+  order.js
+  orderdetail.js
+  payment.js
+  product.js
+  productvariant.js
+  review.js
   users.js
+  wishlist.js
 utils/
   cloudinary.js
 views/
@@ -218,18 +229,6 @@ const CartSchema = new Schema({
 module.exports = mongoose.model('Cart', CartSchema);
 </file>
 
-<file path="models/Category.js">
-const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
-
-const CategorySchema = new Schema({
-  name: { type: String, required: true },
-  description: { type: String }
-}, { timestamps: true });
-
-module.exports = mongoose.model('Category', CategorySchema);
-</file>
-
 <file path="models/index.js">
 const Category = require('./Category');
 const Image = require('./Image');
@@ -305,20 +304,6 @@ const PaymentSchema = new Schema({
 module.exports = mongoose.model('Payment', PaymentSchema);
 </file>
 
-<file path="models/Product.js">
-const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
-
-const ProductSchema = new Schema({
-  categoryID: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
-  name: { type: String, required: true },
-  description: { type: String },
-  price: { type: Number, required: true }
-}, { timestamps: true });
-
-module.exports = mongoose.model('Product', ProductSchema);
-</file>
-
 <file path="models/ProductVariant.js">
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
@@ -333,41 +318,6 @@ const ProductVariantSchema = new Schema({
 module.exports = mongoose.model('ProductVariant', ProductVariantSchema);
 </file>
 
-<file path="models/Review.js">
-const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
-
-const ReviewSchema = new Schema({
-  userID: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  productID: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
-  rating: { type: Number, required: true },
-  comment: { type: String },
-  reviewDate: { type: Date, default: Date.now },
-  status: { type: String, default: 'pending' }
-}, { timestamps: true });
-
-module.exports = mongoose.model('Review', ReviewSchema);
-</file>
-
-<file path="models/User.js">
-const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
-
-const UserSchema = new Schema({
-  name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  phone: { type: String },
-  img: { type: String },
-  role: { type: String, default: 'user' },
-  isActive: { type: Boolean, default: true },
-  resetPasswordCode: String,      
-  resetPasswordExpires: Date       
-}, { timestamps: true });
-
-module.exports = mongoose.model('User', UserSchema);
-</file>
-
 <file path="models/Wishlist.js">
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
@@ -380,213 +330,560 @@ const WishlistSchema = new Schema({
 module.exports = mongoose.model('Wishlist', WishlistSchema);
 </file>
 
-<file path="public/stylesheets/style.css">
-body {
-  padding: 50px;
-  font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
-}
+<file path="routes/adress.js">
+const express = require("express");
+const mongoose = require("mongoose");
+const router = express.Router();
+const Address = require("../models/Address");
 
-a {
-  color: #00B7FF;
-}
-</file>
+// GET /api/addresses?userID=xxx (lấy địa chỉ theo user)
+router.get("/", async (req, res) => {
+  try {
+    const { userID } = req.query;
 
-<file path="routes/index.js">
-var express = require('express');
-var router = express.Router();
+    let filter = {};
+    if (userID && mongoose.Types.ObjectId.isValid(userID)) {
+      filter.userID = userID;
+    }
 
-/* GET home page. */
-router.get('/', function(req, res, next) {
-  res.render('index', { title: 'Express' });
+    const addresses = await Address.find(filter);
+    res.json(addresses);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST addresses (thêm địa chỉ)
+router.post("/", async (req, res) => {
+  try {
+    const { userID, address, name, sdt, isDefault } = req.body;
+
+    if (!userID || !address || !name || !sdt) {
+      return res.status(400).json({ message: "Thiếu thông tin bắt buộc." });
+    }
+
+    // Nếu thêm mới địa chỉ mặc định, update lại các địa chỉ khác của user
+    if (isDefault) {
+      await Address.updateMany({ userID }, { isDefault: false });
+    }
+
+    const newAddress = new Address({
+      userID,
+      address,
+      name,
+      sdt,
+      isDefault: !!isDefault,
+    });
+
+    await newAddress.save();
+    res.status(201).json(newAddress);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PUT /api/addresses/:id (sửa địa chỉ)
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { address, name, sdt, isDefault } = req.body;
+
+    const addressItem = await Address.findById(id);
+    if (!addressItem) {
+      return res.status(404).json({ message: "Không tìm thấy địa chỉ." });
+    }
+
+    if (address) addressItem.address = address;
+    if (name) addressItem.name = name;
+    if (sdt) addressItem.sdt = sdt;
+
+    // Nếu cập nhật thành địa chỉ mặc định
+    if (isDefault) {
+      await Address.updateMany(
+        { userID: addressItem.userID },
+        { isDefault: false }
+      );
+      addressItem.isDefault = true;
+    }
+
+    await addressItem.save();
+    res.json(addressItem);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/addresses/:id (xóa địa chỉ)
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const deleted = await Address.findByIdAndDelete(id);
+    if (!deleted) {
+      return res.status(404).json({ message: "Không tìm thấy địa chỉ." });
+    }
+
+    res.json({ message: "Xóa địa chỉ thành công." });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 module.exports = router;
 </file>
 
-<file path="routes/users.js">
-const express = require('express');
+<file path="routes/Img.js">
+const express = require("express");
+const mongoose = require("mongoose");
 const router = express.Router();
-const nodemailer = require('nodemailer');
-const bcrypt = require('bcryptjs');
-const User = require('../models/User');
-require('dotenv').config();
-const multer = require('multer');
-const fs = require('fs');
-const cloudinary = require('../utils/cloudinary');
-const sharp = require('sharp');
+const Image = require("../models/Image");
 
-// Cấu hình multer upload file tạm vào thư mục 'uploads/'
-const upload = multer({ dest: 'uploads/' });
-
-// Nodemailer config
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true, // SSL
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
-
-// Đăng ký user mới (name, email, password)
-router.post('/register', async (req, res) => {
+// GET /api/images (lấy tất cả hoặc theo productID)
+router.get("/", async (req, res) => {
   try {
-    const { name, email, password } = req.body;
-    if (!name || !email || !password)
-      return res.status(400).json({ message: 'Vui lòng nhập đầy đủ name, email và password' });
+    const { productID } = req.query;
 
-    const existingUser = await User.findOne({ email });
-    if (existingUser)
-      return res.status(409).json({ message: 'Email đã được sử dụng' });
+    let filter = {};
+    if (productID && mongoose.Types.ObjectId.isValid(productID)) {
+      filter.productID = productID;
+    }
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    const user = new User({ name, email, password: hashedPassword, isActive: true });
-    const savedUser = await user.save();
-
-    res.status(201).json(savedUser);
+    const images = await Image.find(filter).populate("productID");
+    res.json(images);
   } catch (err) {
-    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+    res.status(500).json({ message: err.message });
   }
 });
 
-// Đăng nhập (email, password) và kiểm tra isActive
-router.post('/login', async (req, res) => {
+// POST /api/images (thêm mới)
+router.post("/", async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password)
-      return res.status(400).json({ message: 'Vui lòng nhập email và password' });
+    const { productID, imageURL } = req.body;
 
-    const user = await User.findOne({ email });
-    if (!user)
-      return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng' });
+    if (!productID || !imageURL || !Array.isArray(imageURL) || imageURL.length === 0) {
+      return res.status(400).json({ message: "Thiếu productID hoặc imageURL hợp lệ." });
+    }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch)
-      return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng' });
-
-    if (!user.isActive)
-      return res.status(403).json({ message: 'Tài khoản đã bị khóa, vui lòng liên hệ quản trị viên' });
-
-    res.json({ message: 'Đăng nhập thành công', user });
-  } catch (err) {
-    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
-  }
-});
-
-// Gửi mã quên mật khẩu về email
-router.post('/forgot-password', async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email)
-      return res.status(400).json({ message: 'Vui lòng nhập email' });
-
-    const user = await User.findOne({ email });
-    if (!user)
-      return res.status(404).json({ message: 'Email không tồn tại' });
-
-    // Tạo mã 6 số ngẫu nhiên
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-
-    user.resetPasswordCode = code;
-    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // 15 phút
-    await user.save();
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: 'Mã xác thực quên mật khẩu',
-      text: `Mã xác thực của bạn là: ${code}. Mã có hiệu lực trong 15 phút.`
+    const newImage = new Image({
+      productID,
+      imageURL,
     });
 
-    res.json({ message: 'Mã xác thực đã được gửi đến email' });
+    await newImage.save();
+    res.status(201).json(newImage);
   } catch (err) {
-    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+    res.status(500).json({ message: err.message });
   }
 });
 
-// Xác thực mã và đổi mật khẩu mới
-router.post('/reset-password', async (req, res) => {
+// PUT /api/images/:id (sửa ảnh)
+router.put("/:id", async (req, res) => {
   try {
-    const { email, code, newPassword } = req.body;
-    if (!email || !code || !newPassword)
-      return res.status(400).json({ message: 'Thiếu thông tin cần thiết' });
+    const { id } = req.params;
+    const { productID, imageURL } = req.body;
 
-    const user = await User.findOne({ email });
-    if (!user)
-      return res.status(404).json({ message: 'Email không tồn tại' });
+    const image = await Image.findById(id);
+    if (!image) return res.status(404).json({ message: "Không tìm thấy ảnh." });
 
-    if (
-      user.resetPasswordCode !== code ||
-      !user.resetPasswordExpires ||
-      user.resetPasswordExpires < Date.now()
-    ) {
-      return res.status(400).json({ message: 'Mã xác thực không hợp lệ hoặc đã hết hạn' });
-    }
+    if (productID) image.productID = productID;
+    if (imageURL && Array.isArray(imageURL) && imageURL.length > 0) image.imageURL = imageURL;
 
-    // Mã hóa password mới
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
-
-    user.password = hashedPassword;
-    user.resetPasswordCode = undefined;
-    user.resetPasswordExpires = undefined;
-    await user.save();
-
-    res.json({ message: 'Đổi mật khẩu thành công' });
+    await image.save();
+    res.json(image);
   } catch (err) {
-    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+    res.status(500).json({ message: err.message });
   }
 });
 
-// Cập nhật user (name, password, phone, img)
-router.put('/update/:id', upload.single('img'), async (req, res) => {
+// DELETE /api/images/:id (xoá ảnh)
+router.delete("/:id", async (req, res) => {
   try {
-    const userId = req.params.id;
-    const { name, password, phone } = req.body;
+    const { id } = req.params;
 
-    const user = await User.findById(userId);
-    if (!user)
-      return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+    const image = await Image.findByIdAndDelete(id);
+    if (!image) return res.status(404).json({ message: "Không tìm thấy ảnh." });
 
-    const updateFields = {};
-    if (name) updateFields.name = name;
-    if (phone) updateFields.phone = phone;
-
-    if (password) {
-      const salt = await bcrypt.genSalt(10);
-      updateFields.password = await bcrypt.hash(password, salt);
-    }
-
-    if (req.file) {
-      const originalPath = req.file.path;
-      const compressedPath = originalPath + '_compressed.jpg';
-      const start = Date.now();
-      await sharp(originalPath)
-        .resize(600)
-        .jpeg({ quality: 30 })
-        .toFile(compressedPath);
-      console.log('Sharp processing time:', Date.now() - start, 'ms');
-    
-      const result = await cloudinary.uploader.upload(compressedPath, {
-        folder: 'user_images',
-        use_filename: true,
-      });
-    
-      fs.unlinkSync(originalPath);
-      fs.unlinkSync(compressedPath);
-    
-      updateFields.img = result.secure_url;
-    }
-    
-    const updatedUser = await User.findByIdAndUpdate(userId, updateFields, { new: true });
-    res.json({ message: 'Cập nhật thành công', user: updatedUser });
+    res.json({ message: "Đã xoá ảnh thành công." });
   } catch (err) {
-    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+    res.status(500).json({ message: err.message });
   }
 });
+
+module.exports = router;
+</file>
+
+<file path="routes/orderdetail.js">
+const express = require("express");
+const mongoose = require("mongoose");
+const router = express.Router();
+const OrderDetail = require("../models/OrderDetail");
+
+// Lấy tất cả order detail
+router.get("/", async (req, res) => {
+  try {
+    const details = await OrderDetail.find()
+      .populate("variantID")
+      .populate("orderID")
+      .sort({ createdAt: -1 });
+
+    res.json(details);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Lấy order detail theo orderID
+router.get("/order/:orderID", async (req, res) => {
+  try {
+    const { orderID } = req.params;
+    const details = await OrderDetail.find({ orderID })
+      .populate("variantID")
+      .sort({ createdAt: -1 });
+
+    res.json(details);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Lấy chi tiết một order detail theo ID
+router.get("/:id", async (req, res) => {
+  try {
+    const detail = await OrderDetail.findById(req.params.id)
+      .populate("variantID")
+      .populate("orderID");
+
+    if (!detail)
+      return res.status(404).json({ message: "Không tìm thấy chi tiết đơn hàng." });
+
+    res.json(detail);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Thêm mới order detail
+router.post("/", async (req, res) => {
+  try {
+    const { variantID, orderID, quantity, price } = req.body;
+
+    if (!variantID || !orderID || !quantity || !price) {
+      return res.status(400).json({ message: "Thiếu dữ liệu bắt buộc." });
+    }
+
+    const newDetail = new OrderDetail({
+      variantID,
+      orderID,
+      quantity,
+      price,
+    });
+
+    await newDetail.save();
+    res.status(201).json(newDetail);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Cập nhật order detail
+router.put("/:id", async (req, res) => {
+  try {
+    const { quantity, price } = req.body;
+
+    const detail = await OrderDetail.findById(req.params.id);
+    if (!detail)
+      return res.status(404).json({ message: "Không tìm thấy chi tiết đơn hàng." });
+
+    if (quantity !== undefined) detail.quantity = quantity;
+    if (price !== undefined) detail.price = price;
+
+    await detail.save();
+    res.json(detail);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Xoá order detail
+router.delete("/:id", async (req, res) => {
+  try {
+    const detail = await OrderDetail.findByIdAndDelete(req.params.id);
+    if (!detail)
+      return res.status(404).json({ message: "Không tìm thấy chi tiết đơn hàng." });
+
+    res.json({ message: "Đã xoá chi tiết đơn hàng thành công." });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;
+</file>
+
+<file path="routes/payment.js">
+const express = require('express');
+const router = express.Router();
+const Payment = require('../models/Payment');
+
+// 1. Tạo mới một Payment
+// POST /payments
+router.post('/', async (req, res) => {
+  try {
+    const { paymentMethod, paymentGateway, status } = req.body;
+    if (!paymentMethod) {
+      return res.status(400).json({ message: 'paymentMethod là bắt buộc.' });
+    }
+    const payment = new Payment({
+      paymentMethod,
+      paymentGateway,
+      status
+    });
+    const saved = await payment.save();
+    res.status(201).json(saved);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 2. Lấy danh sách tất cả Payments
+// GET /payments
+router.get('/', async (req, res) => {
+  try {
+    const payments = await Payment.find().sort('-createdAt');
+    res.json(payments);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 3. Lấy chi tiết một Payment theo id
+// GET /payments/:id
+router.get('/:id', async (req, res) => {
+  try {
+    const payment = await Payment.findById(req.params.id);
+    if (!payment) {
+      return res.status(404).json({ message: 'Không tìm thấy payment.' });
+    }
+    res.json(payment);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 4. Cập nhật một Payment
+// PUT /payments/:id
+router.put('/:id', async (req, res) => {
+  try {
+    const { paymentMethod, paymentGateway, status } = req.body;
+    const payment = await Payment.findById(req.params.id);
+    if (!payment) {
+      return res.status(404).json({ message: 'Không tìm thấy payment.' });
+    }
+    if (paymentMethod !== undefined) payment.paymentMethod = paymentMethod;
+    if (paymentGateway !== undefined) payment.paymentGateway = paymentGateway;
+    if (status !== undefined) payment.status = status;
+    const updated = await payment.save();
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 5. Xóa một Payment
+// DELETE /payments/:id
+router.delete('/:id', async (req, res) => {
+  try {
+    const payment = await Payment.findById(req.params.id);
+    if (!payment) {
+      return res.status(404).json({ message: 'Không tìm thấy payment.' });
+    }
+    await payment.remove();
+    res.json({ message: 'Xóa payment thành công.' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;
+</file>
+
+<file path="routes/productvariant.js">
+const express = require("express");
+const mongoose = require("mongoose");
+const router = express.Router();
+const ProductVariant = require("../models/ProductVariant");
+
+// Lấy tất cả biến thể sản phẩm
+router.get("/", async (req, res) => {
+  try {
+   const populated = await saved.populate("productID");
+
+    res.json(variants);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+// Lấy tất cả biến thể theo productID
+// GET /productvariant/by-product/:productID
+router.get("/byproduct/:productID", async (req, res) => {
+  try {
+    const { productID } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(productID)) {
+      return res.status(400).json({ message: "productID không hợp lệ." });
+    }
+    const variants = await ProductVariant.find({ productID }).populate("productID");
+    res.json(variants);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+
+// Lấy 1 biến thể theo ID
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "ID không hợp lệ." });
+    }
+    const variant = await ProductVariant.findById(id).populate("productID");
+    if (!variant) return res.status(404).json({ message: "Không tìm thấy biến thể." });
+    res.json(variant);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Thêm biến thể mới
+router.post("/", async (req, res) => {
+  try {
+    const { productID, size, color, stock } = req.body;
+    if (!productID || stock === undefined)
+      return res.status(400).json({ message: "Thiếu productID hoặc stock." });
+
+    const newVariant = new ProductVariant({ productID, size, color, stock });
+    const saved = await newVariant.save();
+const populated = await saved.populate("productID");
+res.status(201).json(populated);
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Sửa biến thể
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { productID, size, color, stock } = req.body;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "ID không hợp lệ." });
+    }
+
+    const variant = await ProductVariant.findById(id);
+    if (!variant) return res.status(404).json({ message: "Không tìm thấy biến thể." });
+
+    if (productID) variant.productID = productID;
+    if (size !== undefined) variant.size = size;
+    if (color !== undefined) variant.color = color;
+    if (stock !== undefined) variant.stock = stock;
+
+ const updated = await variant.save();
+await updated.populate("productID");
+res.json(updated);
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Xóa biến thể
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "ID không hợp lệ." });
+    }
+    const deleted = await ProductVariant.findByIdAndDelete(id);
+    if (!deleted) return res.status(404).json({ message: "Không tìm thấy biến thể." });
+    res.json({ message: "Đã xóa biến thể thành công." });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;
+</file>
+
+<file path="routes/wishlist.js">
+const express = require("express");
+const mongoose = require("mongoose");
+const router = express.Router();
+const Wishlist = require("../models/Wishlist");
+const User = require('../models/User');
+const Product = require("../models/Product");
+
+
+
+// GET /api/wishlist?userID=xxx (lấy wishlist của 1 user)
+router.get("/", async (req, res) => {
+  try {
+    const { userID } = req.query;
+
+    if (!userID || !mongoose.Types.ObjectId.isValid(userID)) {
+      return res.status(400).json({ message: "Thiếu hoặc sai userID." });
+    }
+
+    const wishlist = await Wishlist.find({ userID })
+      .populate("productID")
+      .populate("userID");
+
+    res.json(wishlist);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/wishlist (thêm vào wishlist)
+router.post("/", async (req, res) => {
+  try {
+    const { userID, productID } = req.body;
+
+    if (!userID || !productID) {
+      return res.status(400).json({ message: "Thiếu userID hoặc productID." });
+    }
+
+    // Kiểm tra trùng wishlist của user
+    const exists = await Wishlist.findOne({ userID, productID });
+    if (exists) {
+      return res.status(400).json({ message: "Sản phẩm đã có trong wishlist." });
+    }
+
+    const newWishlist = new Wishlist({ userID, productID });
+    await newWishlist.save();
+
+    res.status(201).json(newWishlist);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/wishlist/:id (xoá mục wishlist theo id)
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const deletedItem = await Wishlist.findByIdAndDelete(id);
+    if (!deletedItem) {
+      return res.status(404).json({ message: "Không tìm thấy mục wishlist." });
+    }
+
+    res.json({ message: "Đã xoá khỏi wishlist." });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;
 </file>
 
@@ -633,36 +930,848 @@ module.exports = cloudinary;
 .env
 </file>
 
-<file path="package.json">
-{
-  "name": "api-duantotnghiep",
-  "version": "0.0.0",
-  "private": true,
-  "scripts": {
-    "start": "node ./bin/www",
-    "dev": "nodemon ./bin/www"
+<file path="README.md">
+# DATN_SEVER
+</file>
+
+<file path="models/Category.js">
+const mongoose = require("mongoose");
+const Schema = mongoose.Schema;
+
+const CategorySchema = new Schema(
+  {
+    name: { type: String, required: true },
+    description: String,
+    status: { type: Boolean, default: true }
   },
-  "dependencies": {
-    "bcryptjs": "^3.0.2",
-    "cloudinary": "^2.6.1",
-    "cookie-parser": "~1.4.4",
-    "debug": "~2.6.9",
-    "dotenv": "^16.5.0",
-    "express": "~4.16.1",
-    "hbs": "~4.0.4",
-    "http-errors": "~1.6.3",
-    "mongoose": "^8.15.0",
-    "morgan": "~1.9.1",
-    "multer": "^2.0.0",
-    "nodemailer": "^7.0.3",
-    "nodemon": "^3.1.10",
-    "sharp": "^0.34.1"
-  }
+  { timestamps: true }
+);
+
+module.exports = mongoose.model("Category", CategorySchema);
+</file>
+
+<file path="models/Product.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const ProductSchema = new Schema({
+  categoryID: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
+  name: { type: String, required: true },
+  description: { type: String },
+  price: { type: Number, required: true },
+  status: { type: Boolean, default: true }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Product', ProductSchema);
+</file>
+
+<file path="models/Review.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const ReviewSchema = new Schema({
+  userID: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  productID: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+  rating: { type: Number, required: true },
+  comment: { type: String },
+  reviewDate: { type: Date, default: Date.now },
+  status: { type: Boolean, default: 'True' }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Review', ReviewSchema);
+</file>
+
+<file path="models/User.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const UserSchema = new Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  phone: { type: String, required: true, unique: true  },
+  img: { type: String },
+  role: { type: String, default: 'user' },
+  isActive: { type: Boolean, default: true },
+  resetPasswordCode: String,      
+  resetPasswordExpires: Date,  
+  otpCode: String, 
+  otpExpires: Date 
+}, { timestamps: true });
+
+module.exports = mongoose.model('User', UserSchema);
+</file>
+
+<file path="public/stylesheets/style.css">
+body {
+  padding: 50px;
+  font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
+}
+
+a {
+  color: #00B7FF;
+}
+
+.admin-container, .login-container {
+  margin-top: 20px;
+}
+
+.admin-container ul, .login-container form {
+  list-style-type: none;
+  padding: 0;
+}
+
+.admin-container li, .login-container div {
+  margin: 10px 0;
+}
+
+.login-container input {
+  padding: 5px;
+  width: 200px;
+}
+
+.login-container button {
+  padding: 10px 20px;
+  background-color: #00B7FF;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.login-container button:hover {
+  background-color: #0099CC;
 }
 </file>
 
-<file path="README.md">
-# DATN_SEVER
+<file path="routes/cart.js">
+const express = require("express");
+const mongoose = require("mongoose");
+const router = express.Router();
+const Cart = require("../models/Cart");
+const ProductVariant = require("../models/ProductVariant");
+
+// Lấy giỏ hàng của user
+router.get("/:userID", async (req, res) => {
+  try {
+    const { userID } = req.params;
+
+    const cartItems = await Cart.find({ userID })
+      .populate({
+        path: "productVariant",
+        populate: { path: "productID" }
+      });
+
+    res.json(cartItems);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+// Tăng số lượng trong giỏ
+router.patch("/:id/increase", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cartItem = await Cart.findById(id);
+    if (!cartItem)
+      return res.status(404).json({ message: "Không tìm thấy item." });
+
+    const variant = await ProductVariant.findById(cartItem.productVariant);
+    if (!variant)
+      return res.status(404).json({ message: "Không tìm thấy variant." });
+
+    if (variant.stock < cartItem.soluong + 1)
+      return res.status(400).json({ message: "Không đủ tồn kho." });
+
+    cartItem.soluong += 1;
+    await cartItem.save();
+    res.json(cartItem);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Giảm số lượng trong giỏ
+router.patch("/:id/decrease", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cartItem = await Cart.findById(id);
+    if (!cartItem)
+      return res.status(404).json({ message: "Không tìm thấy item." });
+
+    // Nếu số lượng sẽ giảm về 0 thì xoá luôn item
+    if (cartItem.soluong <= 1) {
+      await Cart.findByIdAndDelete(id);
+      return res.json({ message: "Đã xoá item khỏi giỏ." });
+    }
+
+    // Ngược lại giảm 1 đơn vị
+    cartItem.soluong -= 1;
+    await cartItem.save();
+    res.json(cartItem);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+
+// Thêm sản phẩm vào giỏ (KHÔNG trừ tồn kho)
+router.post("/", async (req, res) => {
+  try {
+    const { userID, productVariant, soluong } = req.body;
+
+    if (!userID || !productVariant || !soluong)
+      return res.status(400).json({ message: "Thiếu dữ liệu." });
+
+    const variant = await ProductVariant.findById(productVariant);
+    if (!variant)
+      return res.status(404).json({ message: "Không tìm thấy variant." });
+
+    if (variant.stock < soluong)
+      return res.status(400).json({ message: "Không đủ tồn kho." });
+
+    // Kiểm tra nếu sản phẩm đã có trong giỏ thì cộng dồn
+    const existingCartItem = await Cart.findOne({ userID, productVariant });
+    if (existingCartItem) {
+      existingCartItem.soluong += soluong;
+      await existingCartItem.save();
+      return res.json({ message: "Đã cập nhật số lượng.", cartItem: existingCartItem });
+    }
+
+    // Thêm mới
+    const newCartItem = new Cart({ userID, productVariant, soluong });
+    await newCartItem.save();
+
+    res.status(201).json(newCartItem);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Cập nhật số lượng trong giỏ (KHÔNG trừ tồn kho)
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { soluong } = req.body;
+
+    const cartItem = await Cart.findById(id);
+    if (!cartItem)
+      return res.status(404).json({ message: "Không tìm thấy item." });
+
+    const variant = await ProductVariant.findById(cartItem.productVariant);
+    if (!variant)
+      return res.status(404).json({ message: "Không tìm thấy variant." });
+
+    if (variant.stock < soluong)
+      return res.status(400).json({ message: "Không đủ tồn kho." });
+
+    cartItem.soluong = soluong;
+    await cartItem.save();
+
+    res.json(cartItem);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Xoá item khỏi giỏ (KHÔNG cộng tồn kho — vì chưa từng trừ)
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const cartItem = await Cart.findById(id);
+    if (!cartItem)
+      return res.status(404).json({ message: "Không tìm thấy item." });
+
+    await Cart.findByIdAndDelete(id);
+
+    res.json({ message: "Xoá item thành công." });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;
+</file>
+
+<file path="routes/category.js">
+const express = require("express");
+const router = express.Router();
+const Category = require("../models/Category");
+
+// GET /api/categories (lấy tất cả + lọc theo status)
+router.get("/", async (req, res) => {
+  try {
+    const { status } = req.query;
+    let filter = {};
+
+    if (status !== undefined) {
+      filter.status = status === 'true';
+    }
+
+    const categories = await Category.find(filter);
+    res.json(categories);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/categories (thêm mới)
+router.post("/", async (req, res) => {
+  try {
+    const { name, description, status } = req.body;
+
+    if (!name) {
+      return res.status(400).json({ message: "Tên danh mục là bắt buộc." });
+    }
+
+    const newCategory = new Category({ name, description, status });
+    await newCategory.save();
+
+    res.status(201).json(newCategory);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PUT /api/categories/:id (sửa)
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, status } = req.body;
+
+    const category = await Category.findById(id);
+    if (!category) {
+      return res.status(404).json({ message: "Không tìm thấy danh mục." });
+    }
+
+    if (name) category.name = name;
+    if (description) category.description = description;
+    if (status !== undefined) category.status = status;
+
+    await category.save();
+    res.json(category);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/categories/:id (xoá)
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const category = await Category.findByIdAndDelete(id);
+    if (!category) {
+      return res.status(404).json({ message: "Không tìm thấy danh mục." });
+    }
+
+    res.json({ message: "Đã xoá danh mục thành công." });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;
+</file>
+
+<file path="routes/index.js">
+var express = require('express');
+var router = express.Router();
+const User = require('../models/User');
+
+// Middleware kiểm tra vai trò admin
+function isAdmin(req, res, next) {
+  if (!req.session.userId) {
+    return res.redirect('/'); // Chuyển hướng đến trang đăng nhập nếu chưa đăng nhập
+  }
+
+  User.findById(req.session.userId)
+    .then(user => {
+      if (!user) {
+        return res.status(404).send('Không tìm thấy người dùng');
+      }
+      if (user.role !== 'admin') {
+        return res.status(403).send('Bạn không có quyền truy cập trang admin');
+      }
+      req.user = user; // Lưu user vào request để sử dụng trong route
+      next();
+    })
+    .catch(err => {
+      res.status(500).send('Lỗi máy chủ: ' + err.message);
+    });
+}
+
+/* GET home page. */
+router.get('/', function(req, res, next) {
+  res.render('index', { title: 'Express' });
+});
+
+/* GET admin page. */
+router.get('/admin', isAdmin, function(req, res, next) {
+  res.render('admin', { title: 'Bảng Điều Khiển Admin', user: req.user });
+});
+
+module.exports = router;
+</file>
+
+<file path="routes/order.js">
+const express = require("express");
+const mongoose = require("mongoose");
+const router = express.Router();
+
+const Cart           = require("../models/Cart");
+const Order          = require("../models/Order");
+const OrderDetail    = require("../models/OrderDetail");
+const Payment        = require("../models/Payment");
+const ProductVariant = require("../models/ProductVariant");
+
+// GET /order
+// → Lấy tất cả đơn, sort mới nhất, populate user & payment
+router.get("/", async (req, res) => {
+  try {
+    const orders = await Order.find()
+      .populate("userID")
+      .populate("paymentID")
+      .sort({ createdAt: -1 });
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /order/user/:userId
+// → Lấy tất cả đơn theo user, mới nhất trước
+router.get("/user/:userId", async (req, res) => {
+  try {
+    const orders = await Order.find({ userID: req.params.userId })
+      .populate("paymentID")
+      .sort({ createdAt: -1 });
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /order/:id
+// → Lấy chi tiết order (header) và cả items luôn
+router.get("/:id", async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id)
+      .populate("userID")
+      .populate("paymentID");
+    if (!order) return res.status(404).json({ message: "Không tìm thấy đơn." });
+
+    // Lấy luôn order details
+    const details = await OrderDetail.find({ orderID: order._id })
+      .populate({
+        path: "variantID",
+        populate: { path: "productID" }
+      });
+
+    res.json({ order, details });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/**
+ * POST /order/checkout
+ * Flow thanh toán:
+ *  - Tạo Payment
+ *  - Tạo Order
+ *  - Tạo OrderDetail
+ *  - Giảm stock
+ *  - Xóa những item đã thanh toán khỏi Cart
+ */
+router.post("/checkout", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const {
+      userID,
+      paymentInfo,      // { PaymentMethod, status, … }
+      shippingAddress,
+      orderStatus = "Paid",
+      name,
+      sdt,
+      items             // [{ variantID, quantity, price }, …]
+    } = req.body;
+
+    // 1. Validate
+    if (!userID || !paymentInfo || !shippingAddress || !name || !sdt || !items?.length) {
+      return res.status(400).json({ message: "Thiếu dữ liệu bắt buộc hoặc items rỗng." });
+    }
+
+    // 2. Tạo Payment
+    const [newPayment] = await Payment.create([{
+      ...paymentInfo,
+      CreatedAt: new Date(),
+      userID
+    }], { session });
+
+    // 3. Tạo Order
+    const [newOrder] = await Order.create([{
+      userID,
+      paymentID:       newPayment._id,
+      shippingAddress,
+      orderStatus,
+      name,
+      sdt,
+      OrderDate:       new Date()
+    }], { session });
+
+    // 4. Tạo OrderDetail
+    const detailsPayload = items.map(i => ({
+      orderID:    newOrder._id,
+      variantID:  i.variantID,
+      quantity:   i.quantity,
+      price:      i.price
+    }));
+    const newDetails = await OrderDetail.insertMany(detailsPayload, { session });
+
+    // 5. Giảm stock
+    for (const { variantID, quantity } of items) {
+      await ProductVariant.findByIdAndUpdate(
+        variantID,
+        { $inc: { stock: -quantity } },
+        { session }
+      );
+    }
+
+    // 6. Xóa khỏi Cart chỉ những variant đã mua
+    const variantIds = items.map(i => i.variantID);
+    await Cart.deleteMany(
+      { userID, productVariant: { $in: variantIds } },
+      { session }
+    );
+
+    // 7. Commit
+    await session.commitTransaction();
+    session.endSession();
+
+    // 8. Trả về client
+    res.status(201).json({
+      order:   newOrder,
+      payment: newPayment,
+      details: newDetails,
+      cart:    []      // frontend dùng để clear UI
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PUT /order/:id
+// → Cập nhật trạng thái đơn
+router.put("/:id", async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Không tìm thấy đơn." });
+    if (req.body.orderStatus) order.orderStatus = req.body.orderStatus;
+    await order.save();
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /order/:id
+// → Xóa 1 order (và tùy bạn có muốn xóa detail kèm theo)
+router.delete("/:id", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    // Xóa OrderDetail trước
+    await OrderDetail.deleteMany({ orderID: req.params.id }, { session });
+    // Xóa Order
+    const order = await Order.findByIdAndDelete(req.params.id, { session });
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: "Không tìm thấy đơn." });
+    }
+    await session.commitTransaction();
+    session.endSession();
+    res.json({ message: "Đã xoá đơn và chi tiết thành công." });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;
+</file>
+
+<file path="routes/product.js">
+const express = require("express");
+const mongoose = require("mongoose");
+const router = express.Router();
+const Product = require("../models/Product");
+
+// GET /api/products (lọc & sắp xếp)
+router.get("/", async (req, res) => {
+  try {
+    const { categoryID, sort, page = 1, limit = 10, status } = req.query;
+
+    let filter = {};
+
+    if (categoryID && mongoose.Types.ObjectId.isValid(categoryID)) {
+      filter.categoryID = new mongoose.Types.ObjectId(categoryID.trim());
+    }
+
+    // Lọc theo status nếu có
+    if (status !== undefined) {
+      filter.status = status === 'true';
+    }
+
+    let sortOption = {};
+    if (sort === "price_asc") sortOption.price = 1;
+    else if (sort === "price_desc") sortOption.price = -1;
+
+    const skip = (page - 1) * limit;
+
+    const products = await Product.find(filter)
+      .sort(sortOption)
+      .skip(skip)
+      .limit(Number(limit));
+
+    const total = await Product.countDocuments(filter);
+
+    res.json({
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      products,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/products (thêm sản phẩm)
+router.post("/", async (req, res) => {
+  try {
+    const { categoryID, name, description, price, status } = req.body;
+
+    if (!categoryID || !name || !price) {
+      return res.status(400).json({ message: "Thiếu dữ liệu cần thiết." });
+    }
+
+    const newProduct = new Product({
+      categoryID,
+      name,
+      description,
+      price,
+      status,
+    });
+
+    await newProduct.save();
+    res.status(201).json(newProduct);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PUT /api/products/:id (sửa sản phẩm)
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { categoryID, name, description, price, status } = req.body;
+
+    const product = await Product.findById(id);
+    if (!product) return res.status(404).json({ message: "Không tìm thấy sản phẩm." });
+
+    if (categoryID) product.categoryID = categoryID;
+    if (name) product.name = name;
+    if (description) product.description = description;
+    if (price) product.price = price;
+    if (status !== undefined) product.status = status;
+
+    await product.save();
+    res.json(product);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/products/:id (xoá sản phẩm)
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const product = await Product.findByIdAndDelete(id);
+    if (!product) return res.status(404).json({ message: "Không tìm thấy sản phẩm." });
+
+    res.json({ message: "Đã xoá sản phẩm thành công." });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;
+</file>
+
+<file path="routes/review.js">
+// routes/review.js
+const express = require('express');
+const router = express.Router();
+const mongoose = require('mongoose');
+const Review = require('../models/Review');
+
+// 1. Tạo mới một Review
+// POST /reviews
+router.post('/', async (req, res) => {
+  try {
+    const { userID, productID, rating, comment, status } = req.body;
+    if (!userID || !productID || rating == null) {
+      return res.status(400).json({ message: 'Thiếu userID, productID hoặc rating.' });
+    }
+    const review = new Review({
+      userID,
+      productID,
+      rating,
+      comment,
+      status
+    });
+    // Sau khi save
+const saved = await review.save();
+// Populate cả userID và productID trong một lệnh
+await saved.populate(['userID', 'productID']);
+res.status(201).json(saved);
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 2. Lấy danh sách tất cả Reviews
+// GET /reviews
+router.get('/', async (req, res) => {
+  try {
+    const reviews = await Review.find()
+      .sort('-reviewDate')
+      .populate('userID')
+      .populate('productID');
+    res.json(reviews);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 3. Lấy chi tiết một Review theo id
+// GET /reviews/:id
+router.get('/:id', async (req, res) => {
+  try {
+    const review = await Review.findById(req.params.id)
+      .populate('userID')
+      .populate('productID');
+    if (!review) {
+      return res.status(404).json({ message: 'Không tìm thấy review.' });
+    }
+    res.json(review);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+// 4b. Lấy tất cả Reviews của một Product
+// GET /reviews/product/:productID
+router.get('/product/:productID', async (req, res) => {
+  try {
+    const { productID } = req.params;
+    const reviews = await Review.find({ productID })
+      .sort('-reviewDate')
+      .populate('userID')
+      .populate('productID');
+    res.json(reviews);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+
+// 4. Cập nhật một Review
+// PUT /review/:id
+router.put('/:id', async (req, res) => {
+  try {
+    const { rating, comment, status } = req.body;
+    const review = await Review.findById(req.params.id);
+    if (!review) {
+      return res.status(404).json({ message: 'Không tìm thấy review.' });
+    }
+
+    if (rating != null)   review.rating = rating;
+    if (comment !== undefined) review.comment = comment;
+    if (status !== undefined)  review.status = status;
+
+    const updated = await review.save();
+
+    // Chỉ gọi populate một lần, truyền array các field cần populate
+    await updated.populate(['userID', 'productID']);
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+
+// 5. Xóa một Review
+// DELETE /reviews/:id
+router.delete('/:id', async (req, res) => {
+  try {
+    const review = await Review.findById(req.params.id);
+    if (!review) {
+      return res.status(404).json({ message: 'Không tìm thấy review.' });
+    }
+    await review.remove();
+    res.json({ message: 'Xóa review thành công.' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+// GET /reviews/product/:productID/average-rating
+router.get('/product/:productID/average-rating', async (req, res) => {
+  try {
+    const { productID } = req.params;
+
+    // Kiểm tra ObjectId hợp lệ
+    if (!mongoose.Types.ObjectId.isValid(productID)) {
+      return res.status(400).json({ message: "productID không hợp lệ" });
+    }
+
+    const result = await Review.aggregate([
+      {
+        $match: {
+          productID: new mongoose.Types.ObjectId(productID),
+          status: true // chỉ tính review đã được duyệt
+        }
+      },
+      {
+        $group: {
+          _id: "$productID",
+          averageRating: { $avg: "$rating" },
+          totalReviews: { $sum: 1 }
+        }
+      }
+    ]);
+
+    if (result.length === 0) {
+      return res.json({ averageRating: 0, totalReviews: 0 });
+    }
+
+    res.json({
+      averageRating: Math.round(result[0].averageRating * 10) / 10, // Làm tròn 1 chữ số
+      totalReviews: result[0].totalReviews
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+
+
+module.exports = router;
 </file>
 
 <file path="models/Image.js">
@@ -689,6 +1798,323 @@ const ImageSchema = new Schema({
 }, { timestamps: true });
 
 module.exports = mongoose.model('Image', ImageSchema);
+</file>
+
+<file path="routes/users.js">
+const express = require('express');
+const router = express.Router();
+const nodemailer = require('nodemailer');
+const bcrypt = require('bcryptjs');
+const User = require('../models/User');
+const axios = require('axios');
+require('dotenv').config();
+const multer = require('multer');
+const fs = require('fs');
+const cloudinary = require('../utils/cloudinary');
+const sharp = require('sharp');
+
+// Cấu hình multer upload file tạm vào thư mục 'uploads/'
+const upload = multer({ dest: 'uploads/' });
+
+// Nodemailer config
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true, // SSL
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
+// Gửi OTP qua số điện thoại
+router.post('/send-otp', async (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) {
+      return res.status(400).json({ message: 'Vui lòng nhập số điện thoại' });
+    }
+
+    // Kiểm tra xem số điện thoại đã được liên kết với tài khoản chưa
+    const user = await User.findOne({ phone });
+    if (!user) {
+      return res.status(404).json({ message: 'Số điện thoại chưa được đăng ký' });
+    }
+
+    // Tạo mã OTP 6 số ngẫu nhiên
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Lưu OTP và thời gian hết hạn vào database
+    user.otpCode = otp;
+    user.otpExpires = Date.now() + 5 * 60 * 1000; // OTP hết hạn sau 5 phút
+    await user.save();
+
+    // Gửi OTP qua API eSMS
+    const smsData = {
+      ApiKey: '5F36112B2D7D57EBA16673E3F76CCB',
+      Content: `${otp} la ma xac minh dang ky Baotrixemay cua ban`, // Khớp với template đã xác nhận
+      Phone: phone,
+      SecretKey: 'A11953D374FA306EC42A20DE1F59DD',
+      Brandname: 'Baotrixemay',
+      SmsType: '2'
+    };
+
+    const response = await axios.post('https://rest.esms.vn/MainService.svc/json/SendMultipleMessage_V4_post_json/', smsData, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    if (response.data.CodeResult !== '100') {
+      return res.status(500).json({ message: 'Gửi OTP thất bại', error: response.data });
+    }
+
+    res.json({ message: 'Mã OTP đã được gửi đến số điện thoại' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+});
+
+// Đăng ký user mới (name, email, password, phone)
+router.post('/register', async (req, res) => {
+  try {
+    const { name, email, password, phone } = req.body;
+    if (!name || !email || !password || !phone) {
+      return res.status(400).json({ message: 'Vui lòng nhập đầy đủ name, email, password và phone' });
+    }
+
+    // Kiểm tra email đã tồn tại
+    const existingEmail = await User.findOne({ email });
+    if (existingEmail) {
+      return res.status(409).json({ message: 'Email đã được sử dụng' });
+    }
+
+    // Kiểm tra số điện thoại đã tồn tại
+    const existingPhone = await User.findOne({ phone });
+    if (existingPhone) {
+      return res.status(409).json({ message: 'Số điện thoại đã được sử dụng' });
+    }
+
+    // Mã hóa mật khẩu
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Tạo user mới
+    const user = new User({
+      name,
+      email,
+      password: hashedPassword,
+      phone,
+      isActive: true
+    });
+    const savedUser = await user.save();
+
+    res.status(201).json(savedUser);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+});
+
+// Đăng nhập (email với password hoặc phone với OTP)
+router.post('/login', async (req, res) => {
+  try {
+    const { email, phone, password, otp } = req.body;
+
+    // Kiểm tra dữ liệu đầu vào
+    if (!email && !phone) {
+      return res.status(400).json({ message: 'Vui lòng nhập email hoặc số điện thoại' });
+    }
+    if (email && !password) {
+      return res.status(400).json({ message: 'Vui lòng nhập mật khẩu' });
+    }
+    if (phone && !otp) {
+      return res.status(400).json({ message: 'Vui lòng nhập mã OTP' });
+    }
+
+    // Tìm user theo email hoặc phone
+    let user;
+    if (email) {
+      user = await User.findOne({ email });
+    } else if (phone) {
+      user = await User.findOne({ phone });
+    }
+
+    if (!user) {
+      return res.status(401).json({ message: 'Email hoặc số điện thoại không đúng' });
+    }
+
+    // Xác thực bằng password (cho email) hoặc OTP (cho phone)
+    if (email && password) {
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return res.status(401).json({ message: 'Mật khẩu không đúng' });
+      }
+    } else if (phone && otp) {
+      if (user.otpCode !== otp || !user.otpExpires || user.otpExpires < Date.now()) {
+        return res.status(400).json({ message: 'Mã OTP không hợp lệ hoặc đã hết hạn' });
+      }
+      user.otpCode = undefined; // Xóa OTP sau khi xác thực
+      user.otpExpires = undefined;
+      await user.save();
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({ message: 'Tài khoản đã bị khóa, vui lòng liên hệ quản trị viên' });
+    }
+
+    req.session.userId = user._id;
+    res.json({ message: 'Đăng nhập thành công', user });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+});
+
+// Gửi mã quên mật khẩu về email
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: 'Vui lòng nhập email' });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: 'Email không tồn tại' });
+    }
+
+    // Tạo mã 6 số ngẫu nhiên
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    user.resetPasswordCode = code;
+    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // 15 phút
+    await user.save();
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Mã xác thực quên mật khẩu',
+      text: `Mã xác thực của bạn là: ${code}. Mã có hiệu lực trong 15 phút.`
+    });
+
+    res.json({ message: 'Mã xác thực đã được gửi đến email' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+});
+
+// Xác thực mã và đổi mật khẩu mới
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ message: 'Thiếu thông tin cần thiết' });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: 'Email không tồn tại' });
+    }
+
+    if (
+      user.resetPasswordCode !== code ||
+      !user.resetPasswordExpires ||
+      user.resetPasswordExpires < Date.now()
+    ) {
+      return res.status(400).json({ message: 'Mã xác thực không hợp lệ hoặc đã hết hạn' });
+    }
+
+    // Mã hóa password mới
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    user.password = hashedPassword;
+    user.resetPasswordCode = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    res.json({ message: 'Đổi mật khẩu thành công' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+});
+
+// Cập nhật user (name, password, phone, img)
+router.put('/update/:id', upload.single('img'), async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { name, password, phone } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+    }
+    const updateFields = {};
+    if (name) updateFields.name = name;
+    if (phone) {
+      const existingPhone = await User.findOne({ phone });
+      if (existingPhone && existingPhone._id.toString() !== userId) {
+        return res.status(409).json({ message: 'Số điện thoại đã được sử dụng' });
+      }
+      updateFields.phone = phone;
+    }
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      updateFields.password = await bcrypt.hash(password, salt);
+    }
+
+    if (req.file) {
+      const originalPath = req.file.path;
+      const compressedPath = originalPath + '_compressed.jpg';
+      const start = Date.now();
+      await sharp(originalPath)
+        .resize(600)
+        .jpeg({ quality: 30 })
+        .toFile(compressedPath);
+      console.log('Sharp processing time:', Date.now() - start, 'ms');
+      const result = await cloudinary.uploader.upload(compressedPath, {
+        folder: 'user_images',
+        use_filename: true,
+      });
+      fs.unlinkSync(originalPath);
+      fs.unlinkSync(compressedPath);
+      updateFields.img = result.secure_url;
+    }
+    const updatedUser = await User.findByIdAndUpdate(userId, updateFields, { new: true });
+    res.json({ message: 'Cập nhật thành công', user: updatedUser });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+});
+
+module.exports = router;
+</file>
+
+<file path="package.json">
+{
+  "name": "api-duantotnghiep",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node ./bin/www",
+    "dev": "nodemon ./bin/www"
+  },
+  "dependencies": {
+    "axios": "^1.9.0",
+    "bcryptjs": "^3.0.2",
+    "cloudinary": "^2.6.1",
+    "cookie-parser": "~1.4.4",
+    "debug": "~2.6.9",
+    "dotenv": "^16.5.0",
+    "express": "~4.16.1",
+    "express-session": "^1.18.1",
+    "hbs": "~4.0.4",
+    "http-errors": "~1.6.3",
+    "mongoose": "^8.15.0",
+    "morgan": "~1.9.1",
+    "multer": "^2.0.0",
+    "nodemailer": "^7.0.3",
+    "nodemon": "^3.1.10",
+    "sharp": "^0.34.1"
+  }
+}
 </file>
 
 </files>

@@ -1,0 +1,32 @@
+const express = require('express');
+const router = express.Router();
+const Message = require('../models/Message');
+
+// Lấy tin nhắn của user
+router.get('/', async (req, res) => {
+  try {
+    const { userID } = req.query;
+    if (!userID) return res.status(400).json({ message: 'Thiếu userID' });
+    const messages = await Message.find({ userID }).sort({ timestamp: 1 }); // sort theo thời gian tăng dần
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Gửi tin nhắn mới
+router.post('/', async (req, res) => {
+  try {
+    const { userID, sender, text } = req.body;
+    if (!userID || !sender || !text) {
+      return res.status(400).json({ message: 'Thiếu dữ liệu' });
+    }
+    const message = new Message({ userID, sender, text });
+    await message.save();
+    res.status(201).json(message);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;
