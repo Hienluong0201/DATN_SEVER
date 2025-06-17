@@ -23,6 +23,82 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS
   }
 });
+// middleware kiểm tra admin
+function requireAdmin(req, res, next) {
+  if (!req.session.userId || !req.session.isAdmin) {
+    return res.status(403).json({ message: 'Bạn không có quyền truy cập admin' });
+  }
+  next();
+}
+
+// --- Các route admin quản lý user ---
+
+// [GET] /users         => Lấy danh sách tất cả user
+router.get('/', requireAdmin, async (req, res) => {
+  try {
+    const users = await User.find().select('-password -resetPasswordCode -otpCode');
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+});
+
+// [GET] /users/:id     => Lấy chi tiết 1 user
+router.get('/:id', requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('-password -resetPasswordCode -otpCode');
+    if (!user) return res.status(404).json({ message: 'Không tìm thấy user' });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+});
+
+// [POST] /users        => Admin tạo 1 user mới
+router.post('/', requireAdmin, async (req, res) => {
+  try {
+    const { name, email, password, phone, role } = req.body;
+    // Kiểm tra bắt buộc
+    if (!name || !email || !password || !phone) {
+      return res.status(400).json({ message: 'Thiếu thông tin bắt buộc' });
+    }
+    // Kiểm tra tồn tại
+    if (await User.findOne({ email })) {
+      return res.status(409).json({ message: 'Email đã tồn tại' });
+    }
+    if (await User.findOne({ phone })) {
+      return res.status(409).json({ message: 'Phone đã tồn tại' });
+    }
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashed = await bcrypt.hash(password, salt);
+    const u = new User({ name, email, password: hashed, phone, role: role || 'user' });
+    const saved = await u.save();
+    res.status(201).json(saved);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+});
+
+// [PUT] /users/:id     => Admin cập nhật bất kỳ user nào
+router.put('/:id', requireAdmin, async (req, res) => {
+  try {
+    const updates = { ...req.body };
+    // Nếu có password thì hash lại
+    if (updates.password) {
+      const salt = await bcrypt.genSalt(10);
+      updates.password = await bcrypt.hash(updates.password, salt);
+    }
+    const updated = await User.findByIdAndUpdate(req.params.id, updates, { new: true })
+                              .select('-password -resetPasswordCode -otpCode');
+    if (!updated) return res.status(404).json({ message: 'Không tìm thấy user' });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
+  }
+});
+
+
 
 // Gửi OTP qua số điện thoại
 router.post('/send-otp', async (req, res) => {
