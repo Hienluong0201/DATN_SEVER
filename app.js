@@ -4,6 +4,7 @@ var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var mongoose = require('mongoose');
+require('dotenv').config();
 
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
@@ -11,7 +12,6 @@ var productsRouter = require('./routes/product');
 var imgsRouter = require('./routes/Img');
 var categoryRouter = require('./routes/category');
 var addressRouter = require('./routes/adress');
-require('dotenv').config();
 var session = require('express-session');
 var wishlistRouter = require('./routes/wishlist');
 var cartRouter = require('./routes/cart');
@@ -20,10 +20,12 @@ var orderdetailRouter = require('./routes/orderdetail');
 var productvariantRouter = require('./routes/productvariant');
 var paymentRouter = require('./routes/payment');
 var reviewRouter = require('./routes/review');
-const cors = require('cors');
 var messageRouter = require('./routes/message');
 
 var app = express();
+
+var cors = require('cors');
+app.use(cors());
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -66,7 +68,6 @@ app.use('/orderdetail', orderdetailRouter);
 app.use('/productvariant', productvariantRouter);
 app.use('/payment', paymentRouter);
 app.use('/review', reviewRouter);
-app.use(cors());
 app.use('/messages', messageRouter);
 
 // catch 404 and forward to error handler
