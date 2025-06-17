@@ -7,8 +7,11 @@ const UserSchema = new Schema({
   password: { type: String, required: true },
   phone: { type: String, required: true, unique: true  },
   img: { type: String },
-  role: { type: String, default: 'user' },
-  isActive: { type: Boolean, default: true },
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user'
+  },
   resetPasswordCode: String,      
   resetPasswordExpires: Date,  
   otpCode: String, 
