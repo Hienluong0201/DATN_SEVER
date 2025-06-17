@@ -69,30 +69,33 @@ router.get("/:id", async (req, res) => {
 router.post("/checkout", async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
+
   try {
     const {
       userID,
-      paymentInfo,      // { PaymentMethod, status, … }
+      paymentInfo,
       shippingAddress,
-      orderStatus = "Paid",
+      orderStatus = "pending",
       name,
       sdt,
-      items             // [{ variantID, quantity, price }, …]
+      items       // [{ variantID, quantity, price }, …]
     } = req.body;
 
-    // 1. Validate
     if (!userID || !paymentInfo || !shippingAddress || !name || !sdt || !items?.length) {
       return res.status(400).json({ message: "Thiếu dữ liệu bắt buộc hoặc items rỗng." });
     }
 
-    // 2. Tạo Payment
+    // 1. Tạo Payment
     const [newPayment] = await Payment.create([{
       ...paymentInfo,
-      CreatedAt: new Date(),
+      createdAt: new Date(),
       userID
     }], { session });
 
-    // 3. Tạo Order
+    // 2. Tính tổng tiền
+    const totalAmount = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+
+    // 3. Tạo Order kèm luôn mảng items và totalAmount
     const [newOrder] = await Order.create([{
       userID,
       paymentID:       newPayment._id,
@@ -100,10 +103,12 @@ router.post("/checkout", async (req, res) => {
       orderStatus,
       name,
       sdt,
-      OrderDate:       new Date()
+      items,
+      totalAmount,
+      orderDate:       new Date()
     }], { session });
 
-    // 4. Tạo OrderDetail
+    // 4. Tạo OrderDetail (nếu bạn vẫn muốn giữ collection riêng)
     const detailsPayload = items.map(i => ({
       orderID:    newOrder._id,
       variantID:  i.variantID,
@@ -121,12 +126,9 @@ router.post("/checkout", async (req, res) => {
       );
     }
 
-    // 6. Xóa khỏi Cart chỉ những variant đã mua
+    // 6. Xóa khỏi Cart những variant đã mua
     const variantIds = items.map(i => i.variantID);
-    await Cart.deleteMany(
-      { userID, productVariant: { $in: variantIds } },
-      { session }
-    );
+    await Cart.deleteMany({ userID, productVariant: { $in: variantIds } }, { session });
 
     // 7. Commit
     await session.commitTransaction();
@@ -134,11 +136,12 @@ router.post("/checkout", async (req, res) => {
 
     // 8. Trả về client
     res.status(201).json({
-      order:   newOrder,
-      payment: newPayment,
-      details: newDetails,
-      cart:    []      // frontend dùng để clear UI
+      order:      newOrder,
+      payment:    newPayment,
+      details:    newDetails,
+      cart:       []   // để frontend clear giỏ
     });
+
   } catch (err) {
     await session.abortTransaction();
     session.endSession();

@@ -20,6 +20,7 @@ var orderdetailRouter = require('./routes/orderdetail');
 var productvariantRouter = require('./routes/productvariant');
 var paymentRouter = require('./routes/payment');
 var reviewRouter = require('./routes/review');
+const cors = require('cors');
 var messageRouter = require('./routes/message');
 
 var app = express();
@@ -43,6 +44,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
+
 // Cấu hình session
 app.use(session({
   secret: 'oke123', // Thay bằng một chuỗi bí mật mạnh hơn
@@ -64,6 +66,7 @@ app.use('/orderdetail', orderdetailRouter);
 app.use('/productvariant', productvariantRouter);
 app.use('/payment', paymentRouter);
 app.use('/review', reviewRouter);
+app.use(cors());
 app.use('/messages', messageRouter);
 
 // catch 404 and forward to error handler
