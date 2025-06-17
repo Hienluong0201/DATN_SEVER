@@ -21,6 +21,7 @@ var productvariantRouter = require('./routes/productvariant');
 var paymentRouter = require('./routes/payment');
 var reviewRouter = require('./routes/review');
 const cors = require('cors');
+var messageRouter = require('./routes/message');
 
 var app = express();
 
@@ -66,6 +67,7 @@ app.use('/productvariant', productvariantRouter);
 app.use('/payment', paymentRouter);
 app.use('/review', reviewRouter);
 app.use(cors());
+app.use('/messages', messageRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

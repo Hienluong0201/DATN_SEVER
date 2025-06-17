@@ -5,7 +5,7 @@ const User = require('../models/User');
 // Middleware kiểm tra vai trò admin
 function isAdmin(req, res, next) {
   if (!req.session.userId) {
-    return res.redirect('/users/login'); // Chuyển hướng đến trang đăng nhập nếu chưa đăng nhập
+    return res.redirect('/'); // Chuyển hướng đến trang đăng nhập nếu chưa đăng nhập
   }
 
   User.findById(req.session.userId)

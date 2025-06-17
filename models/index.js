@@ -10,6 +10,7 @@ const Cart = require('./Cart');
 const Payment = require('./Payment');
 const Order = require('./Order');
 const OrderDetail = require('./OrderDetail');
+const Message = require('./Message');
 
 module.exports = {
   Category,
@@ -23,5 +24,6 @@ module.exports = {
   Cart,
   Payment,
   Order,
-  OrderDetail
+  OrderDetail,
+  Message,
 };
