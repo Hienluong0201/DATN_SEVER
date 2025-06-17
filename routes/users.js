@@ -154,26 +154,26 @@ router.post('/login', async (req, res) => {
       await user.save();
     }
 
-    // Kiểm tra tài khoản còn hoạt động
-    if (!user.isActive) {
+    // Kiểm tra tài khoản còn hoạt động (chỉ chặn với user thường, admin bỏ qua)
+    if (!user.isActive && user.role !== 'admin') {
       return res.status(403).json({ message: 'Tài khoản đã bị khóa, vui lòng liên hệ quản trị viên' });
     }
 
     // Nếu client yêu cầu đăng nhập admin thì kiểm tra quyền
     if (admin) {
-      if (!user.isAdmin) {
+      if (user.role !== 'admin') {
         return res.status(403).json({ message: 'Bạn không có quyền truy cập admin' });
       }
-      // Đánh dấu session là admin
+      req.session.userId  = user._id;
       req.session.isAdmin = true;
-      req.session.userId = user._id;
       return res.json({ message: 'Đăng nhập thành công với quyền Admin', user });
     }
 
     // Đăng nhập bình thường
-    req.session.userId = user._id;
+    req.session.userId  = user._id;
     req.session.isAdmin = false;
     res.json({ message: 'Đăng nhập thành công', user });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });

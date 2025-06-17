@@ -12,6 +12,7 @@ const UserSchema = new Schema({
     enum: ['user', 'admin'],
     default: 'user'
   },
+    isActive:           { type: Boolean, default: true },
   resetPasswordCode: String,      
   resetPasswordExpires: Date,  
   otpCode: String, 
