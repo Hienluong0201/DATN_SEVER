@@ -110,10 +110,10 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Đăng nhập (email với password hoặc phone với OTP)
+// Đăng nhập (email với password hoặc phone với OTP), kèm phân quyền admin
 router.post('/login', async (req, res) => {
   try {
-    const { email, phone, password, otp } = req.body;
+    const { email, phone, password, otp, admin } = req.body;
 
     // Kiểm tra dữ liệu đầu vào
     if (!email && !phone) {
@@ -130,7 +130,7 @@ router.post('/login', async (req, res) => {
     let user;
     if (email) {
       user = await User.findOne({ email });
-    } else if (phone) {
+    } else {
       user = await User.findOne({ phone });
     }
 
@@ -138,31 +138,48 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Email hoặc số điện thoại không đúng' });
     }
 
-    // Xác thực bằng password (cho email) hoặc OTP (cho phone)
-    if (email && password) {
+    // Xác thực bằng password (email) hoặc OTP (phone)
+    if (email) {
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) {
         return res.status(401).json({ message: 'Mật khẩu không đúng' });
       }
-    } else if (phone && otp) {
+    } else {
       if (user.otpCode !== otp || !user.otpExpires || user.otpExpires < Date.now()) {
         return res.status(400).json({ message: 'Mã OTP không hợp lệ hoặc đã hết hạn' });
       }
-      user.otpCode = undefined; // Xóa OTP sau khi xác thực
+      // Xóa OTP sau khi xác thực
+      user.otpCode = undefined;
       user.otpExpires = undefined;
       await user.save();
     }
 
+    // Kiểm tra tài khoản còn hoạt động
     if (!user.isActive) {
       return res.status(403).json({ message: 'Tài khoản đã bị khóa, vui lòng liên hệ quản trị viên' });
     }
 
+    // Nếu client yêu cầu đăng nhập admin thì kiểm tra quyền
+    if (admin) {
+      if (!user.isAdmin) {
+        return res.status(403).json({ message: 'Bạn không có quyền truy cập admin' });
+      }
+      // Đánh dấu session là admin
+      req.session.isAdmin = true;
+      req.session.userId = user._id;
+      return res.json({ message: 'Đăng nhập thành công với quyền Admin', user });
+    }
+
+    // Đăng nhập bình thường
     req.session.userId = user._id;
+    req.session.isAdmin = false;
     res.json({ message: 'Đăng nhập thành công', user });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Lỗi máy chủ', error: err.message });
   }
 });
+
 
 // Gửi mã quên mật khẩu về email
 router.post('/forgot-password', async (req, res) => {
