@@ -14,7 +14,7 @@ router.get("/", async (req, res) => {
       if (!mongoose.Types.ObjectId.isValid(productID)) {
         return res.status(400).json({ message: "productID không hợp lệ." });
       }
-      filter.productID = mongoose.Types.ObjectId(productID);
+      filter.productID = new mongoose.Types.ObjectId(productID);
     }
 
     const images = await Image.find(filter)
@@ -43,7 +43,7 @@ router.post("/", async (req, res) => {
     }
 
     const newImage = await Image.create({
-      productID: mongoose.Types.ObjectId(productID),
+      productID: new mongoose.Types.ObjectId(productID),
       imageURL,
     });
 
