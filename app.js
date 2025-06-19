@@ -21,7 +21,7 @@ var productvariantRouter = require('./routes/productvariant');
 var paymentRouter = require('./routes/payment');
 var reviewRouter = require('./routes/review');
 var messageRouter = require('./routes/message');
-
+const videoRouter = require('./routes/video');
 var app = express();
 
 var cors = require('cors');
@@ -69,6 +69,7 @@ app.use('/productvariant', productvariantRouter);
 app.use('/payment', paymentRouter);
 app.use('/review', reviewRouter);
 app.use('/messages', messageRouter);
+app.use('/api/v1/videos', videoRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
