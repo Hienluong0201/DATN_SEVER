@@ -3,45 +3,77 @@ const mongoose = require("mongoose");
 const router = express.Router();
 const Product = require("../models/Product");
 
-// GET /api/products (lọc & sắp xếp)
+const Image    = require("../models/Image");   // <-- thêm
+// GET /api/products (lọc, sắp xếp, trang, và trả về ảnh)
 router.get("/", async (req, res) => {
   try {
-    const { categoryID, sort, page = 1, limit = 10, status } = req.query;
+    const { categoryID, name, sort, page = 1, limit = 10, status } = req.query;
+    const filter = {};
 
-    let filter = {};
-
-    if (categoryID && mongoose.Types.ObjectId.isValid(categoryID)) {
+    // 1) Build filter như cũ
+    if (categoryID && mongoose.Types.ObjectId.isValid(categoryID.trim())) {
       filter.categoryID = new mongoose.Types.ObjectId(categoryID.trim());
     }
-
-    // Lọc theo status nếu có
+    if (name) {
+      filter.name = { $regex: name.trim(), $options: "i" };
+    }
     if (status !== undefined) {
-      filter.status = status === 'true';
+      filter.status = status === "true";
     }
 
-    let sortOption = {};
-    if (sort === "price_asc") sortOption.price = 1;
+    // 2) Build sort & pagination
+    const sortOption = {};
+    if (sort === "price_asc")  sortOption.price = 1;
     else if (sort === "price_desc") sortOption.price = -1;
-
     const skip = (page - 1) * limit;
 
+    // 3) Lấy products
     const products = await Product.find(filter)
       .sort(sortOption)
       .skip(skip)
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .lean();    // lean để dễ gán thêm thuộc tính
 
+    // 4) Lấy tất cả ảnh của các product này
+    const productIds = products.map(p => p._id);
+    const imageDocs = await Image.find({
+      productID: { $in: productIds }
+    }).lean();
+
+    // 5) Gom nhóm imageURL theo productID
+    const host = `${req.protocol}://${req.get("host")}`; 
+    const imageMap = imageDocs.reduce((acc, img) => {
+      const key = img.productID.toString();
+      // img.imageURL is assumed an array of filenames or full URLs
+      // nếu chỉ lưu filename thì build full URL:
+      const urls = img.imageURL.map(file =>
+        file.startsWith("http") 
+          ? file 
+          : `${host}/images/${file}`
+      );
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(...urls);
+      return acc;
+    }, {});
+
+    // 6) Gán vào mỗi product
+    products.forEach(p => {
+      p.images = imageMap[p._id.toString()] || [];
+    });
+
+    // 7) Count + trả về
     const total = await Product.countDocuments(filter);
-
     res.json({
       total,
-      page: Number(page),
+      page:  Number(page),
       limit: Number(limit),
-      products,
+      products
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
 
 // POST /api/products (thêm sản phẩm)
 router.post("/", async (req, res) => {
