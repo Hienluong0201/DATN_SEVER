@@ -41,4 +41,40 @@ router.get('/between', async (req, res) => {
 
   res.json(messages);
 });
+
+// Lấy tất cả tin nhắn (từ tất cả user)
+router.get('/all', async (req, res) => {
+  try {
+    const messages = await Message.find().sort({ timestamp: 1 }); // Lấy tất cả tin nhắn, sort theo thời gian
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/reply', async (req, res) => {
+  try {
+    const { userID, text, replyToMessageId } = req.body;
+    if (!userID || !text) {
+      return res.status(400).json({ message: 'Thiếu userID hoặc nội dung tin nhắn' });
+    }
+    if (replyToMessageId) {
+      const originalMessage = await Message.findById(replyToMessageId);
+      if (!originalMessage) {
+        return res.status(404).json({ message: 'Tin nhắn gốc không tồn tại' });
+      }
+    }
+    const replyMessage = new Message({
+      userID,
+      sender: 'admin',
+      text,
+      replyTo: replyToMessageId || null
+    });
+    await replyMessage.save();
+    res.status(201).json(replyMessage);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;
