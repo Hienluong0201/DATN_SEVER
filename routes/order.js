@@ -186,5 +186,25 @@ router.delete("/:id", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+// Hủy đơn hàng (chỉ khi orderStatus là 'pending')
+router.put("/:id/cancel", async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
 
+    if (!order) {
+      return res.status(404).json({ message: "Không tìm thấy đơn hàng." });
+    }
+
+    if (order.orderStatus !== "pending") {
+      return res.status(400).json({ message: "Chỉ có thể hủy đơn khi trạng thái là 'pending'." });
+    }
+
+    order.orderStatus = "cancelled";
+    await order.save();
+
+    res.json({ message: "Đã hủy đơn hàng thành công.", order });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 module.exports = router;
