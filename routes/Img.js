@@ -119,11 +119,13 @@ router.post(
       if (!productID || !mongoose.Types.ObjectId.isValid(productID)) {
         return res.status(400).json({ message: "productID không hợp lệ." });
       }
-      // Lấy url ảnh từ Cloudinary
-      const imageURL = req.files.map(file => file.path);
-      if (imageURL.length === 0) {
+
+      // Kiểm tra và lấy url ảnh từ Cloudinary
+      const files = req.files || [];
+      if (files.length === 0) {
         return res.status(400).json({ message: "Chưa có ảnh nào được upload." });
       }
+      const imageURL = files.map((file) => file.path); // Chỉ map nếu files tồn tại
 
       const newImage = await Image.create({
         productID,
@@ -132,7 +134,8 @@ router.post(
 
       res.status(201).json(newImage);
     } catch (err) {
-      res.status(500).json({ message: err.message });
+      console.error("Lỗi upload:", err); // Log chi tiết lỗi
+      res.status(500).json({ message: "Lỗi server: " + err.message });
     }
   }
 );
