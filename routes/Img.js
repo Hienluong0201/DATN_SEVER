@@ -3,6 +3,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const router = express.Router();
 const Image = require("../models/Image");
+const { uploadImage } = require('../middlewares/upload'); // Đúng path file export uploadImage của bạn
 
 // GET /api/images?productID=...
 router.get("/", async (req, res) => {
@@ -108,4 +109,31 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+router.post(
+  "/upload",
+  uploadImage.array("images", 5), // Tối đa 5 ảnh/lần
+  async (req, res) => {
+    try {
+      const { productID } = req.body;
+      // Kiểm tra productID hợp lệ
+      if (!productID || !mongoose.Types.ObjectId.isValid(productID)) {
+        return res.status(400).json({ message: "productID không hợp lệ." });
+      }
+      // Lấy url ảnh từ Cloudinary
+      const imageURL = req.files.map(file => file.path);
+      if (imageURL.length === 0) {
+        return res.status(400).json({ message: "Chưa có ảnh nào được upload." });
+      }
+
+      const newImage = await Image.create({
+        productID,
+        imageURL,
+      });
+
+      res.status(201).json(newImage);
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  }
+);
 module.exports = router;
