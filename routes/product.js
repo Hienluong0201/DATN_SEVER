@@ -125,11 +125,13 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-
-    const product = await Product.findByIdAndDelete(id);
+    const product = await Product.findByIdAndUpdate(
+      id,
+      { status: false },   // Soft delete
+      { new: true }
+    );
     if (!product) return res.status(404).json({ message: "Không tìm thấy sản phẩm." });
-
-    res.json({ message: "Đã xoá sản phẩm thành công." });
+    res.json({ message: "Đã xoá (mềm) sản phẩm thành công." });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
