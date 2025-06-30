@@ -32,6 +32,48 @@ const OrderSchema = new Schema({
   sdt: {
     type: String,
     required: true
+  },
+  // Mảng sản phẩm trong đơn
+  items: [{
+    variantID: {
+      type: Schema.Types.ObjectId,
+      ref: 'ProductVariant',
+      required: true
+    },
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1
+    },
+    price: {
+      type: Number,
+      required: true,
+      min: 0
+    }
+  }],
+  // Tổng tiền gốc của đơn (sum items price * quantity)
+  totalAmount: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  // Số tiền đã giảm do voucher
+  discountAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  // Tổng tiền sau khi áp voucher
+  finalTotal: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  // Tham chiếu đến voucher nếu có
+  voucher: {
+    type: Schema.Types.ObjectId,
+    ref: 'Voucher',
+    default: null
   }
 }, { timestamps: true });
 
