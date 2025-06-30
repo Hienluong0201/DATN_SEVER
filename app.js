@@ -22,6 +22,9 @@ var paymentRouter = require('./routes/payment');
 var reviewRouter = require('./routes/review');
 var messageRouter = require('./routes/message');
 const videoRouter = require('./routes/video');
+var statisticsRoter = require('./routes/revenuestat');
+var voucherRouter = require('./routes/voucher');
+
 var app = express();
 
 var cors = require('cors');
@@ -70,7 +73,8 @@ app.use('/payment', paymentRouter);
 app.use('/review', reviewRouter);
 app.use('/messages', messageRouter);
 app.use('/api/v1/videos', videoRouter);
-
+app.use('/statistics',statisticsRoter);
+app.use('/voucher',voucherRouter);
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
   next(createError(404));
