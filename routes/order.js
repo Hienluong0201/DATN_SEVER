@@ -1,7 +1,7 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const router = express.Router();
-
+const sendEmail = require("../utils/sendEmail");
 const Cart           = require("../models/Cart");
 const Order          = require("../models/Order");
 const Payment        = require("../models/Payment");
@@ -167,7 +167,10 @@ router.put("/:id", async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const order = await Order.findById(req.params.id);
+    // Tìm đơn hàng và populate userID để lấy email
+    const order = await Order.findById(req.params.id)
+      .populate("userID", "email")
+      .session(session);
     if (!order) {
       await session.abortTransaction();
       session.endSession();
@@ -176,9 +179,19 @@ router.put("/:id", async (req, res) => {
 
     const oldStatus = order.orderStatus;
     const newStatus = req.body.orderStatus;
+
+    // Kiểm tra trạng thái hợp lệ
+    const validStatuses = ["pending", "processing", "shipped", "completed", "cancelled"];
+    if (newStatus && !validStatuses.includes(newStatus)) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ message: "Trạng thái không hợp lệ." });
+    }
+
     if (newStatus && newStatus !== oldStatus) {
       order.orderStatus = newStatus;
-      // Nếu chuyển sang hủy
+
+      // Nếu chuyển sang hủy, hoàn kho
       if (newStatus === "cancelled" && oldStatus !== "cancelled") {
         for (const item of order.items) {
           await ProductVariant.findByIdAndUpdate(
@@ -188,9 +201,35 @@ router.put("/:id", async (req, res) => {
           );
         }
       }
+
+      // Lưu đơn hàng
+      await order.save({ session });
+
+      // Gửi email cho khách hàng
+      const statusMessages = {
+        pending: "Đơn hàng của bạn đang được xử lý.",
+        processing: "Đơn hàng của bạn đang được chuẩn bị.",
+        shipped: "Đơn hàng của bạn đã được gửi đi.",
+        completed: "Đơn hàng của bạn đã hoàn thành.",
+        cancelled: "Đơn hàng của bạn đã bị hủy."
+      };
+
+      await sendEmail({
+        to: order.userID.email,
+        subject: `Cập nhật trạng thái đơn hàng #${order._id}`,
+        text: `Kính gửi ${order.name},\n\nĐơn hàng #${order._id} của bạn đã được cập nhật sang trạng thái: **${newStatus}**.\n${statusMessages[newStatus]}\n\nCảm ơn bạn đã mua sắm với chúng tôi!`,
+        html: `
+          <h2>Kính gửi ${order.name},</h2>
+          <p>Đơn hàng <b>#${order._id}</b> của bạn đã được cập nhật sang trạng thái: <b>${newStatus}</b>.</p>
+          <p>${statusMessages[newStatus]}</p>
+          <p>Cảm ơn bạn đã mua sắm với chúng tôi!</p>
+        `
+      });
+    } else {
+      // Nếu không thay đổi trạng thái, chỉ lưu đơn hàng
+      await order.save({ session });
     }
 
-    await order.save({ session });
     await session.commitTransaction();
     session.endSession();
 
