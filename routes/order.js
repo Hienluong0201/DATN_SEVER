@@ -10,19 +10,47 @@ const Voucher        = require("../models/Voucher");
 
 // GET /order
 // → Lấy tất cả đơn, sort mới nhất, populate user, payment, voucher, và variant->product
+// GET /order?limit=10&page=1&search=abc
 router.get("/", async (req, res) => {
   try {
-    const orders = await Order.find()
+    // Lấy query, set default nếu không truyền
+    let { limit = 10, page = 1, search = "" } = req.query;
+    limit = Math.max(parseInt(limit) || 10, 1);
+    page = Math.max(parseInt(page) || 1, 1);
+
+    // Tạo filter tìm kiếm (theo _id, tên, sdt)
+    const filter = {};
+    if (search && search.trim()) {
+      const regex = new RegExp(search.trim(), "i");
+      filter.$or = [
+        ...(search.length === 24 ? [{ _id: search }] : []),
+        { name: regex },
+        { sdt: regex },
+        // Nếu muốn mở rộng: tìm theo email
+        // { "userID.email": regex },
+        // { shippingAddress: regex }
+      ];
+    }
+
+    // Đếm tổng số lượng đơn thỏa mãn điều kiện
+    const total = await Order.countDocuments(filter);
+
+    // Lấy dữ liệu phân trang, populate các trường liên quan
+    const orders = await Order.find(filter)
       .populate("userID")
       .populate("paymentID")
       .populate({ path: "items.variantID", populate: { path: "productID" } })
       .populate("voucher")
-      .sort({ createdAt: -1 });
-    res.json(orders);
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    res.json({ orders, total });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
 
 // GET /order/user/:userId
 // → Lấy tất cả đơn theo user, mới nhất trước
