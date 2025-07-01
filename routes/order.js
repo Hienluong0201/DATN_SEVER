@@ -7,6 +7,7 @@ const Order          = require("../models/Order");
 const Payment        = require("../models/Payment");
 const ProductVariant = require("../models/ProductVariant");
 const Voucher        = require("../models/Voucher");
+const OrderDetail    = require("../models/OrderDetail");
 
 // GET /order
 // → Lấy tất cả đơn, sort mới nhất, populate user, payment, voucher, và variant->product
@@ -164,6 +165,14 @@ router.post("/checkout", async (req, res) => {
       voucher:        voucherId,
       orderDate:      new Date()
     }], { session });
+    // 4. Tạo OrderDetail (nếu bạn vẫn muốn giữ collection riêng)
+    const detailsPayload = items.map(i => ({
+      orderID:    newOrder._id,
+      variantID:  i.variantID,
+      quantity:   i.quantity,
+      price:      i.price
+    }));
+    const newDetails = await OrderDetail.insertMany(detailsPayload, { session });
 
     // Giảm stock
     for (const { variantID, quantity } of items) {
