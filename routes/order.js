@@ -209,7 +209,7 @@ router.put("/:id", async (req, res) => {
     const newStatus = req.body.orderStatus;
 
     // Kiểm tra trạng thái hợp lệ
-    const validStatuses = ["pending", "processing", "shipped", "completed", "cancelled"];
+    const validStatuses = ["pending", "paid", "shipped", "completed", "cancelled"];
     if (newStatus && !validStatuses.includes(newStatus)) {
       await session.abortTransaction();
       session.endSession();
