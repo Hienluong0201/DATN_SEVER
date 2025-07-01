@@ -14,15 +14,23 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// 2. Lấy danh sách voucher (filter theo active, ngày)
-// GET /api/vouchers?active=true
+// 2. Lấy danh sách voucher (filter, search, phân trang)
+// GET /api/vouchers?active=true&page=1&limit=20&search=CODE
 router.get('/', async (req, res, next) => {
   try {
-    const { active } = req.query;
+    const { active, page = 1, limit = 20, search = "" } = req.query;
     const filter = {};
     if (active !== undefined) filter.isActive = active === 'true';
-    const list = await Voucher.find(filter).sort({ createdAt: -1 });
-    res.json({ data: list });
+    if (search) filter.code = { $regex: search, $options: 'i' };
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const list = await Voucher.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
+    const total = await Voucher.countDocuments(filter);
+
+    res.json({ data: list, total });
   } catch (err) {
     next(err);
   }
@@ -51,6 +59,32 @@ router.put('/:id', async (req, res, next) => {
     next(err);
   }
 });
+
+// 5. Xóa (hoặc deactivate) voucher
+// DELETE /api/vouchers/:id
+router.delete('/:id', async (req, res, next) => {
+  try {
+    // chỉ set isActive = false thay vì xóa cứng
+    const v = await Voucher.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
+    if (!v) return res.status(404).json({ error: 'Voucher không tồn tại' });
+    res.json({ data: v });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 6. Khôi phục voucher bị deactivate
+// PATCH /api/vouchers/:id/restore
+router.patch('/:id/restore', async (req, res, next) => {
+  try {
+    const v = await Voucher.findByIdAndUpdate(req.params.id, { isActive: true }, { new: true });
+    if (!v) return res.status(404).json({ error: 'Voucher không tồn tại' });
+    res.json({ data: v });
+  } catch (err) {
+    next(err);
+  }
+});
+
 
 // 5. Xóa (hoặc deactivate) voucher
 // DELETE /api/vouchers/:id
@@ -135,5 +169,15 @@ router.post('/apply', async (req, res, next) => {
     next(err);
   }
 });
-
+// 8. Lịch sử sử dụng voucher (tuỳ hệ thống!)
+// Giả sử bạn lưu lịch sử dùng voucher ở collection Order (mỗi order lưu code voucher đã dùng)
+// GET /api/vouchers/:id/history
+router.get('/:id/history', async (req, res, next) => {
+  try {
+    const orders = await Order.find({ "voucher.code": req.params.id });
+    res.json({ data: orders });
+  } catch (err) {
+    next(err);
+  }
+});
 module.exports = router;
