@@ -44,45 +44,51 @@ const zaloPayConfig = {
     endpoint: "https://sb-openapi.zalopay.vn/v2/create",
 };
 router.post("/zalopay", async (req, res) => {
-    try {
-        const { amount = 10000 } = req.body;
-        const order = {
-            app_id: zaloPayConfig.app_id,
-            app_trans_id: generateAppTransId(),
-            app_user: "user_test",
-            app_time: Date.now(),
-            amount: 10000,
-            item: JSON.stringify([]), // PHẢI stringify
-            embed_data: JSON.stringify({}), // PHẢI stringify
-            description: `ZaloPay test order`,
-            // callback_url: "https://zalopay.vn/", // URL hợp lệ
-        };
-        // MAC ký bảo mật
-        const data =
-            order.app_id +
-            "|" +
-            order.app_trans_id +
-            "|" +
-            order.app_user +
-            "|" +
-            order.amount +
-            "|" +
-            order.app_time +
-            "|" +
-            order.embed_data +
-            "|" +
-            order.item;
-        order.mac = crypto.createHmac("sha256", zaloPayConfig.key1).update(data).digest("hex");
-        console.log(order);
-        
-        // Gửi request
-        // const response = await axios.post(zaloPayConfig.endpoint, null, { params: order });//sai
-        const response = await axios.post(zaloPayConfig.endpoint,order )
-        res.json(response.data);
-    } catch (e) {
-        res.status(500).json({ error: e.toString() });
+  try {
+    const { amount, orderId } = req.body;
+    
+    // Kiểm tra amount hợp lệ
+    if (!amount || typeof amount !== 'number' || amount <= 0) {
+      return res.status(400).json({ error: "Số tiền không hợp lệ." });
     }
+    if (!orderId) {
+      return res.status(400).json({ error: "Thiếu orderId." });
+    }
+
+    const order = {
+      app_id: zaloPayConfig.app_id,
+      app_trans_id: generateAppTransId(),
+      app_user: "user_test",
+      app_time: Date.now(),
+      amount: Math.floor(amount), // Sử dụng amount từ req.body, đảm bảo là số nguyên
+      item: JSON.stringify([]),
+      embed_data: JSON.stringify({ orderId }), // Lưu orderId để callback
+      description: `Thanh toán đơn hàng #${orderId}`,
+      bank_code: "", // Có thể để trống hoặc chỉ định ngân hàng
+    };
+
+    // Tạo MAC để bảo mật
+    const data = 
+      order.app_id + "|" +
+      order.app_trans_id + "|" +
+      order.app_user + "|" +
+      order.amount + "|" +
+      order.app_time + "|" +
+      order.embed_data + "|" +
+      order.item;
+    order.mac = crypto.createHmac("sha256", zaloPayConfig.key1).update(data).digest("hex");
+
+    console.log('ZaloPay Order:', order);
+
+    // Gửi request tới ZaloPay
+    const response = await axios.post(zaloPayConfig.endpoint, order);
+    res.json(response.data);
+  } catch (e) {
+    console.error('ZaloPay Error:', e.response ? e.response.data : e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
+
 
 // GET /order
 // → Lấy tất cả đơn, sort mới nhất, populate user, payment, voucher, và variant->product
