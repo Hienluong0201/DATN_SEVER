@@ -8,6 +8,81 @@ const Payment        = require("../models/Payment");
 const ProductVariant = require("../models/ProductVariant");
 const Voucher        = require("../models/Voucher");
 const OrderDetail    = require("../models/OrderDetail");
+const crypto = require("crypto");
+const axios = require("axios");
+require('dotenv').config(); 
+const Stripe = require("stripe");
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+//thanh toán và stripe
+router.post("/stripe-payment-intent", async (req, res) => {
+  try {
+    const { amount = 5000 } = req.body;
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency: "usd",
+      payment_method_types: ["card"],
+    });
+    res.json({ clientSecret: paymentIntent.client_secret });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const generateAppTransId = () => {
+    const date = new Date();
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const yy = String(date.getFullYear()).slice(2);
+    const rand = Math.floor(Math.random() * 100000);
+    return `${yy}${mm}${dd}_${rand}`;
+}
+
+// --- ZALO PAY CONFIG (NÊN để .env) ---
+const zaloPayConfig = {
+    app_id: 2553,             // AppID test của bạn (nên để .env)
+    key1: "PcY4iZIKFCIdgZvA6ueMcMHHUbRLYjPL",    // Key1 test của bạn
+    endpoint: "https://sb-openapi.zalopay.vn/v2/create",
+};
+router.post("/zalopay", async (req, res) => {
+    try {
+        const { amount = 10000 } = req.body;
+        const order = {
+            app_id: zaloPayConfig.app_id,
+            app_trans_id: generateAppTransId(),
+            app_user: "user_test",
+            app_time: Date.now(),
+            amount: 10000,
+            item: JSON.stringify([]), // PHẢI stringify
+            embed_data: JSON.stringify({}), // PHẢI stringify
+            description: `ZaloPay test order`,
+            // callback_url: "https://zalopay.vn/", // URL hợp lệ
+        };
+        // MAC ký bảo mật
+        const data =
+            order.app_id +
+            "|" +
+            order.app_trans_id +
+            "|" +
+            order.app_user +
+            "|" +
+            order.amount +
+            "|" +
+            order.app_time +
+            "|" +
+            order.embed_data +
+            "|" +
+            order.item;
+        order.mac = crypto.createHmac("sha256", zaloPayConfig.key1).update(data).digest("hex");
+        console.log(order);
+        
+        // Gửi request
+        // const response = await axios.post(zaloPayConfig.endpoint, null, { params: order });//sai
+        const response = await axios.post(zaloPayConfig.endpoint,order )
+        res.json(response.data);
+    } catch (e) {
+        res.status(500).json({ error: e.toString() });
+    }
+});
 
 // GET /order
 // → Lấy tất cả đơn, sort mới nhất, populate user, payment, voucher, và variant->product
@@ -301,3 +376,4 @@ router.delete("/:id", async (req, res) => {
 });
 
 module.exports = router;
+
