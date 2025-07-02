@@ -19,7 +19,7 @@ router.post("/stripe-payment-intent", async (req, res) => {
     const { amount = 5000 } = req.body;
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
-      currency: "usd",
+      currency: "VND",
       payment_method_types: ["card"],
     });
     res.json({ clientSecret: paymentIntent.client_secret });
@@ -43,16 +43,14 @@ const zaloPayConfig = {
     key1: "PcY4iZIKFCIdgZvA6ueMcMHHUbRLYjPL",    // Key1 test của bạn
     endpoint: "https://sb-openapi.zalopay.vn/v2/create",
 };
+// Thanh toán ZaloPay
 router.post("/zalopay", async (req, res) => {
   try {
-    const { amount, orderId } = req.body;
-    
+    const { amount } = req.body;
+
     // Kiểm tra amount hợp lệ
     if (!amount || typeof amount !== 'number' || amount <= 0) {
       return res.status(400).json({ error: "Số tiền không hợp lệ." });
-    }
-    if (!orderId) {
-      return res.status(400).json({ error: "Thiếu orderId." });
     }
 
     const order = {
@@ -60,15 +58,16 @@ router.post("/zalopay", async (req, res) => {
       app_trans_id: generateAppTransId(),
       app_user: "user_test",
       app_time: Date.now(),
-      amount: Math.floor(amount), // Sử dụng amount từ req.body, đảm bảo là số nguyên
+      amount: Math.floor(amount), // Sử dụng amount từ req.body
       item: JSON.stringify([]),
-      embed_data: JSON.stringify({ orderId }), // Lưu orderId để callback
-      description: `Thanh toán đơn hàng #${orderId}`,
-      bank_code: "", // Có thể để trống hoặc chỉ định ngân hàng
+      embed_data: JSON.stringify({}), // Không cần orderId
+      description: `Thanh toán qua ZaloPay ${amount} VND`,
+      bank_code: "",
+      callback_url: zaloPayConfig.callback_url,
     };
 
     // Tạo MAC để bảo mật
-    const data = 
+    const data =
       order.app_id + "|" +
       order.app_trans_id + "|" +
       order.app_user + "|" +
@@ -88,7 +87,6 @@ router.post("/zalopay", async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
 
 // GET /order
 // → Lấy tất cả đơn, sort mới nhất, populate user, payment, voucher, và variant->product
