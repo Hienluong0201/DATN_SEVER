@@ -7,7 +7,7 @@ router.get('/', async (req, res) => {
   try {
     const { userID } = req.query;
     if (!userID) return res.status(400).json({ message: 'Thiếu userID' });
-    const messages = await Message.find({ userID }).sort({ timestamp: 1 }); // sort theo thời gian tăng dần
+    const messages = await Message.find({ userID }).sort({ timestamp: 1 });
     res.json(messages);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -21,56 +21,74 @@ router.post('/', async (req, res) => {
     if (!userID || !sender || !text) {
       return res.status(400).json({ message: 'Thiếu dữ liệu' });
     }
+
     const message = new Message({ userID, sender, text });
     await message.save();
+
+    // phát socket realtime
+    const io = req.app.get('io');
+    io.emit('new_message', message);
+
     res.status(201).json(message);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
+// Lấy tin nhắn giữa user và admin
 router.get('/between', async (req, res) => {
-  const { userID } = req.query;
-  if (!userID) return res.status(400).json({ message: 'Thiếu userID' });
-
-  // Lấy tin nhắn giữa user và admin (sender là 'user' hoặc 'admin')
-  const messages = await Message.find({
-    userID,
-    sender: { $in: ['user', 'admin'] }
-  }).sort({ timestamp: 1 });
-
-  res.json(messages);
-});
-
-// Lấy tất cả tin nhắn (từ tất cả user)
-router.get('/all', async (req, res) => {
   try {
-    const messages = await Message.find().sort({ timestamp: 1 }); // Lấy tất cả tin nhắn, sort theo thời gian
+    const { userID } = req.query;
+    if (!userID) return res.status(400).json({ message: 'Thiếu userID' });
+
+    const messages = await Message.find({
+      userID,
+      sender: { $in: ['user', 'admin'] }
+    }).sort({ timestamp: 1 });
+
     res.json(messages);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
+// Lấy tất cả tin nhắn
+router.get('/all', async (req, res) => {
+  try {
+    const messages = await Message.find().sort({ timestamp: 1 });
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Gửi tin nhắn trả lời
 router.post('/reply', async (req, res) => {
   try {
     const { userID, text, replyToMessageId } = req.body;
     if (!userID || !text) {
       return res.status(400).json({ message: 'Thiếu userID hoặc nội dung tin nhắn' });
     }
+
+    let replyTo = null;
     if (replyToMessageId) {
-      const originalMessage = await Message.findById(replyToMessageId);
-      if (!originalMessage) {
-        return res.status(404).json({ message: 'Tin nhắn gốc không tồn tại' });
-      }
+      const original = await Message.findById(replyToMessageId);
+      if (!original) return res.status(404).json({ message: 'Tin nhắn gốc không tồn tại' });
+      replyTo = replyToMessageId;
     }
+
     const replyMessage = new Message({
       userID,
       sender: 'admin',
       text,
-      replyTo: replyToMessageId || null
+      replyTo
     });
     await replyMessage.save();
+
+    // phát socket realtime
+    const io = req.app.get('io');
+    io.emit('new_message', replyMessage);
+
     res.status(201).json(replyMessage);
   } catch (err) {
     res.status(500).json({ message: err.message });
