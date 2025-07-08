@@ -3,32 +3,38 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const Review = require('../models/Review');
-
+const { uploadImage } = require('../middlewares/upload');
 // 1. Tạo mới một Review
 // POST /reviews
-router.post('/', async (req, res) => {
+// POST /reviews
+router.post('/', uploadImage.array('images'), async (req, res) => {
   try {
     const { userID, productID, rating, comment, status } = req.body;
+
     if (!userID || !productID || rating == null) {
       return res.status(400).json({ message: 'Thiếu userID, productID hoặc rating.' });
     }
+
+    // Lấy link ảnh từ req.files (Cloudinary trả về .path là URL)
+    const imageUrls = req.files?.map(file => file.path) || [];
+
     const review = new Review({
       userID,
       productID,
       rating,
       comment,
-      status
+      status,
+      images: imageUrls, // lưu link ảnh vào mảng images
     });
-    // Sau khi save
-const saved = await review.save();
-// Populate cả userID và productID trong một lệnh
-await saved.populate(['userID', 'productID']);
-res.status(201).json(saved);
 
+    const saved = await review.save();
+    await saved.populate(['userID', 'productID']);
+    res.status(201).json(saved);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
 
 // 2. Lấy danh sách tất cả Reviews
 // GET /reviews
