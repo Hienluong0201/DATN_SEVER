@@ -8,9 +8,10 @@ const { uploadImage } = require('../middlewares/upload');
 // POST /reviews
 // POST /reviews
 router.post('/', uploadImage.array('images'), async (req, res) => {
+   console.log('🔥 ĐÃ VÀO ROUTE /review');
   try {
     const { userID, productID, rating, comment, status } = req.body;
-
+    console.log('📸 Received files:', req.files);
     if (!userID || !productID || rating == null) {
       return res.status(400).json({ message: 'Thiếu userID, productID hoặc rating.' });
     }

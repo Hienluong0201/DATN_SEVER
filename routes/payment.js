@@ -80,5 +80,17 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+// GET /payments/:id/status
+router.get('/:id/status', async (req, res) => {
+  try {
+    const payment = await Payment.findById(req.params.id);
+    if (!payment) {
+      return res.status(404).json({ message: 'Không tìm thấy payment.' });
+    }
 
+    res.json({ status: payment.status });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 module.exports = router;
