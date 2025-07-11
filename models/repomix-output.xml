@@ -1,0 +1,508 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+Address.js
+Cart.js
+Category.js
+Image.js
+index.js
+Message.js
+Order.js
+OrderDetail.js
+Payment.js
+Product.js
+ProductVariant.js
+Revenuestat.js
+Review.js
+User.js
+Video.js
+Voucher.js
+Wishlist.js
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="Address.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const AddressSchema = new Schema({
+  userID: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  address: { type: String, required: true },
+  isDefault: { type: Boolean, default: false },
+  name: { type: String, required: true },
+  sdt: { type: String, required: true }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Address', AddressSchema);
+</file>
+
+<file path="Cart.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const CartSchema = new Schema({
+  userID: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  productVariant: { type: Schema.Types.ObjectId, ref: 'ProductVariant', required: true },
+  soluong: { type: Number, required: true }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Cart', CartSchema);
+</file>
+
+<file path="Category.js">
+const mongoose = require("mongoose");
+const Schema = mongoose.Schema;
+
+const CategorySchema = new Schema(
+  {
+    name: { type: String, required: true },
+    description: String,
+    status: { type: Boolean, default: true }
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model("Category", CategorySchema);
+</file>
+
+<file path="Image.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const ImageSchema = new Schema({
+  productID: { 
+    type: Schema.Types.ObjectId, 
+    ref: 'Product', 
+    required: true 
+  },
+  imageURL: { 
+    type: [String], // Mảng các đường dẫn ảnh
+    required: true,
+    validate: {
+      validator: function(urls) {
+        // Đảm bảo mảng có ít nhất 1 phần tử
+        return urls && urls.length > 0;
+      },
+      message: 'Phải có ít nhất một đường dẫn ảnh'
+    }
+  }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Image', ImageSchema);
+</file>
+
+<file path="index.js">
+const Category = require('./Category');
+const Image = require('./Image');
+const Product = require('./Product');
+const ProductVariant = require('./ProductVariant');
+const User = require('./User');
+const Address = require('./Address');
+const Review = require('./Review');
+const Wishlist = require('./Wishlist');
+const Cart = require('./Cart');
+const Payment = require('./Payment');
+const Order = require('./Order');
+const OrderDetail = require('./OrderDetail');
+const Message = require('./Message');
+
+module.exports = {
+  Category,
+  Image,
+  Product,
+  ProductVariant,
+  User,
+  Address,
+  Review,
+  Wishlist,
+  Cart,
+  Payment,
+  Order,
+  OrderDetail,
+  Message,
+};
+</file>
+
+<file path="Message.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const MessageSchema = new Schema({
+  userID: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  sender: { type: String, enum: ['user', 'admin'], required: true },
+  text: { type: String, required: true },
+  timestamp: { type: Date, default: Date.now },
+  replyTo: { type: Schema.Types.ObjectId, ref: 'Message', default: null } // thêm field này
+});
+
+module.exports = mongoose.model('Message', MessageSchema);
+</file>
+
+<file path="Order.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const OrderSchema = new Schema({
+  userID: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  paymentID: {
+    type: Schema.Types.ObjectId,
+    ref: 'Payment',
+    required: true
+  },
+  shippingAddress: {
+    type: String,
+    required: true
+  },
+  orderStatus: {
+    type: String,
+    enum: ['pending', 'paid', 'shipped', 'delivered', 'cancelled'],
+    default: 'pending'
+  },
+  orderDate: {
+    type: Date,
+    default: Date.now
+  },
+  name: {
+    type: String,
+    required: true
+  },
+  sdt: {
+    type: String,
+    required: true
+  },
+  // Mảng sản phẩm trong đơn
+  items: [{
+    variantID: {
+      type: Schema.Types.ObjectId,
+      ref: 'ProductVariant',
+      required: true
+    },
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1
+    },
+    price: {
+      type: Number,
+      required: true,
+      min: 0
+    }
+  }],
+  // Tổng tiền gốc của đơn (sum items price * quantity)
+  totalAmount: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  // Số tiền đã giảm do voucher
+  discountAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  // Tổng tiền sau khi áp voucher
+  finalTotal: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  // Tham chiếu đến voucher nếu có
+  voucher: {
+    type: Schema.Types.ObjectId,
+    ref: 'Voucher',
+    default: null
+  }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Order', OrderSchema);
+</file>
+
+<file path="OrderDetail.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const OrderDetailSchema = new Schema({
+  variantID: { type: Schema.Types.ObjectId, ref: 'ProductVariant', required: true },
+  orderID: { type: Schema.Types.ObjectId, ref: 'Order', required: true },
+  quantity: { type: Number, required: true },
+  price: { type: Number, required: true }
+}, { timestamps: true });
+
+module.exports = mongoose.model('OrderDetail', OrderDetailSchema);
+</file>
+
+<file path="Payment.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const PaymentSchema = new Schema({
+    amount: {            // thêm trường này để lưu số tiền thanh toán (VNĐ)
+    type: Number,
+    required: true
+  },
+  paymentMethod: { type: String, required: true },
+  paymentGateway: { type: String },
+  status: { type: String, default: 'pending' },
+  createdAt: { type: Date, default: Date.now }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Payment', PaymentSchema);
+</file>
+
+<file path="Product.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const ProductSchema = new Schema({
+  categoryID: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
+  name: { type: String, required: true },
+  description: { type: String },
+  price: { type: Number, required: true },
+  status: { type: Boolean, default: true },
+   image:       { type: mongoose.Schema.Types.ObjectId, ref: "Img" }  // tham chiếu đến Img
+}, { timestamps: true });
+
+module.exports = mongoose.model('Product', ProductSchema);
+</file>
+
+<file path="ProductVariant.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const ProductVariantSchema = new Schema({
+  productID: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+  size: { type: String },
+  color: { type: String },
+  stock: { type: Number, required: true }
+}, { timestamps: true });
+
+module.exports = mongoose.model('ProductVariant', ProductVariantSchema);
+</file>
+
+<file path="Revenuestat.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const RevenueStatSchema = new Schema({
+  // Phân nhóm: day | month | year
+  groupBy: {
+    type: String,
+    enum: ['day', 'month', 'year'],
+    required: true
+  },
+  // Giá trị chuỗi thể hiện đơn vị thời gian, ví dụ '2025-06-23' | '2025-06' | '2025'
+  period: {
+    type: String,
+    required: true
+  },
+  // Tổng doanh thu trong khoảng period
+  totalRevenue: {
+    type: Number,
+    required: true,
+    default: 0
+  },
+  // Số đơn hàng tương ứng
+  orderCount: {
+    type: Number,
+    required: true,
+    default: 0
+  },
+  // (Tuỳ chọn) Nếu bạn muốn ghi lại luôn khoảng ngày gốc
+  startDate: {
+    type: Date
+  },
+  endDate: {
+    type: Date
+  },
+  // Thời điểm record này được tạo ra
+  generatedAt: {
+    type: Date,
+    default: Date.now
+  }
+}, {
+  timestamps: true
+});
+
+// Đảm bảo mỗi (groupBy, period) chỉ lưu một bản duy nhất
+RevenueStatSchema.index({ groupBy: 1, period: 1 }, { unique: true });
+
+module.exports = mongoose.model('RevenueStat', RevenueStatSchema);
+</file>
+
+<file path="Review.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const ReviewSchema = new Schema({
+  userID: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  productID: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+  rating: { type: Number, required: true },
+  comment: { type: String },
+  reviewDate: { type: Date, default: Date.now },
+  status: { type: Boolean, default: true },
+  images: [{ type: String }] 
+}, { timestamps: true });
+
+module.exports = mongoose.model('Review', ReviewSchema);
+</file>
+
+<file path="User.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const UserSchema = new Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  phone: { type: String, required: true, unique: true  },
+  img: { type: String },
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user'
+  },
+    isActive:           { type: Boolean, default: true },
+  resetPasswordCode: String,      
+  resetPasswordExpires: Date,  
+  otpCode: String, 
+  otpExpires: Date 
+}, { timestamps: true });
+
+module.exports = mongoose.model('User', UserSchema);
+</file>
+
+<file path="Video.js">
+// models/Video.js
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const VideoSchema = new Schema({
+  userID: { type: Schema.Types.ObjectId, ref: 'User', required: true }, // Người đăng video
+  videoURL: { type: String, required: true }, // URL video trên Cloudinary
+  thumbnailURL: { type: String }, // URL ảnh thumbnail (tùy chọn)
+  caption: { type: String }, // Mô tả video
+  products: [{ type: Schema.Types.ObjectId, ref: 'Product' }], // Danh sách sản phẩm gắn với video
+  status: { type: Boolean, default: true }, // Trạng thái (hiển thị hay ẩn)
+  views: { type: Number, default: 0 }, // Số lượt xem
+  likes: [{ type: Schema.Types.ObjectId, ref: 'User' }], // Danh sách user đã like
+}, { timestamps: true });
+
+module.exports = mongoose.model('Video', VideoSchema);
+</file>
+
+<file path="Voucher.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const VoucherSchema = new Schema({
+  code: {
+    type: String,
+    required: true,
+    unique: true,     // unique sẽ tự tạo index duy nhất cho code
+    uppercase: true,
+    trim: true
+  },
+  discountType: {
+    type: String,
+    enum: ['percent', 'fixed'],   // percent = giảm %, fixed = giảm tiền cố định
+    required: true
+  },
+  discountValue: {
+    type: Number,
+    required: true,               // nếu percent: 10 → 10%; nếu fixed: 50000 → 50.000đ
+    min: 0
+  },
+  usageLimit: {
+    type: Number,
+    default: 1                    // tổng số lần voucher được dùng
+  },
+  usedCount: {
+    type: Number,
+    default: 0
+  },
+  minOrderValue: {
+    type: Number,
+    default: 0                    // đơn tối thiểu để áp voucher
+  },
+  validFrom: {
+    type: Date,
+    default: Date.now
+  },
+  validTo: {
+    type: Date,
+    required: true
+  },
+  applicableCategories: [String], // nếu chỉ áp cho 1 số category
+  applicableProducts: [{          // hoặc chỉ áp cho 1 số product
+    type: Schema.Types.ObjectId,
+    ref: 'Product'
+  }],
+  isActive: {
+    type: Boolean,
+    default: true
+  }
+}, { timestamps: true });
+
+
+
+module.exports = mongoose.model('Voucher', VoucherSchema);
+</file>
+
+<file path="Wishlist.js">
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+
+const WishlistSchema = new Schema({
+  userID: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  productID: { type: Schema.Types.ObjectId, ref: 'Product', required: true }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Wishlist', WishlistSchema);
+</file>
+
+</files>
