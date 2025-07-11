@@ -174,10 +174,57 @@ router.post('/apply', async (req, res, next) => {
 // GET /api/vouchers/:id/history
 router.get('/:id/history', async (req, res, next) => {
   try {
-    const orders = await Order.find({ "voucher.code": req.params.id });
-    res.json({ data: orders });
+    const code = req.params.id.trim().toUpperCase();
+
+    const voucher = await Voucher.findOne({ code });
+    if (!voucher) {
+      return res.status(404).json({ message: "Không tìm thấy voucher" });
+    }
+
+    const orders = await Order.find({ voucher: voucher._id })
+      .populate("userID", "name email") // lấy info người dùng
+      .populate("voucher", "code discountValue"); // optional
+
+    // Thống kê người dùng duy nhất đã dùng voucher
+    const userStatsMap = new Map();
+
+    orders.forEach(order => {
+      const user = order.userID;
+      if (!user || !user._id) return;
+
+      const userId = user._id.toString();
+      if (!userStatsMap.has(userId)) {
+        userStatsMap.set(userId, {
+          userID: userId,
+          name: user.name,
+          email: user.email,
+          count: 1
+        });
+      } else {
+        userStatsMap.get(userId).count += 1;
+      }
+    });
+
+    const userStats = Array.from(userStatsMap.values());
+
+    // Trả về kết quả gồm danh sách đơn hàng & thống kê
+    res.json({
+      voucher: {
+        code: voucher.code,
+        discountType: voucher.discountType,
+        discountValue: voucher.discountValue,
+        usageLimit: voucher.usageLimit,
+        usedCount: voucher.usedCount,
+      },
+      totalOrders: orders.length,
+      uniqueUsers: userStats.length,
+      userStats: userStats,
+      orders: orders, // có thể bỏ nếu không cần chi tiết đơn
+    });
   } catch (err) {
     next(err);
   }
 });
+
+
 module.exports = router;
