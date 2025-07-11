@@ -109,18 +109,48 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// [DELETE] /users/:id => Xóa 1 user
-router.delete("/:id", async (req, res) => {
+// [PATCH] /users/:id/deactivate => Vô hiệu hóa user
+router.patch("/:id/deactivate", async (req, res) => {
   try {
-    const deleted = await User.findByIdAndDelete(req.params.id);
-    if (!deleted) 
+    const currentUserId = req.body.userId; // 👈 Truyền từ client
+    const targetUserId = req.params.id;
+
+    // 🔒 Không cho tự vô hiệu hóa mình
+    if (currentUserId === targetUserId) {
+      return res.status(400).json({ message: "Bạn không thể vô hiệu hóa chính tài khoản của mình." });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      targetUserId,
+      { isActive: false },
+      { new: true }
+    );
+
+    if (!user) {
       return res.status(404).json({ message: "Không tìm thấy user" });
-    res.json({ message: "Xóa user thành công." });
+    }
+
+    res.json({ message: "Vô hiệu hóa user thành công", user });
   } catch (err) {
     res.status(500).json({ message: "Lỗi máy chủ", error: err.message });
   }
 });
 
+// [PATCH] /users/:id/activate => Kích hoạt lại user
+router.patch("/:id/activate", async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { isActive: true },
+      { new: true }
+    );
+    if (!user)
+      return res.status(404).json({ message: "Không tìm thấy user" });
+    res.json({ message: "Kích hoạt user thành công", user });
+  } catch (err) {
+    res.status(500).json({ message: "Lỗi máy chủ", error: err.message });
+  }
+});
 
 
 // Gửi OTP qua số điện thoại
