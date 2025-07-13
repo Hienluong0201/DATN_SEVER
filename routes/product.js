@@ -2,9 +2,10 @@ const express = require("express");
 const mongoose = require("mongoose");
 const router = express.Router();
 const Product = require("../models/Product");
-
+const Review = require('../models/Review');
 const Image    = require("../models/Image");   // <-- thêm
 // GET /api/products (lọc, sắp xếp, trang, và trả về ảnh)
+
 router.get("/", async (req, res) => {
   try {
     const { categoryID, name, sort, page = 1, limit = 10, status } = req.query;
@@ -23,7 +24,7 @@ router.get("/", async (req, res) => {
 
     // 2) Build sort & pagination
     const sortOption = {};
-    if (sort === "price_asc")  sortOption.price = 1;
+    if (sort === "price_asc") sortOption.price = 1;
     else if (sort === "price_desc") sortOption.price = -1;
     const skip = (page - 1) * limit;
 
@@ -32,48 +33,61 @@ router.get("/", async (req, res) => {
       .sort(sortOption)
       .skip(skip)
       .limit(Number(limit))
-      .lean();    // lean để dễ gán thêm thuộc tính
+      .lean(); // lean để dễ gán thêm thuộc tính
 
     // 4) Lấy tất cả ảnh của các product này
-    const productIds = products.map(p => p._id);
+    const productIds = products.map((p) => p._id);
     const imageDocs = await Image.find({
-      productID: { $in: productIds }
+      productID: { $in: productIds },
     }).lean();
 
     // 5) Gom nhóm imageURL theo productID
-    const host = `${req.protocol}://${req.get("host")}`; 
+    const host = `${req.protocol}://${req.get("host")}`;
     const imageMap = imageDocs.reduce((acc, img) => {
       const key = img.productID.toString();
-      // img.imageURL is assumed an array of filenames or full URLs
-      // nếu chỉ lưu filename thì build full URL:
-      const urls = img.imageURL.map(file =>
-        file.startsWith("http") 
-          ? file 
-          : `${host}/images/${file}`
+      const urls = img.imageURL.map((file) =>
+        file.startsWith("http") ? file : `${host}/images/${file}`
       );
       if (!acc[key]) acc[key] = [];
       acc[key].push(...urls);
       return acc;
     }, {});
 
-    // 6) Gán vào mỗi product
-    products.forEach(p => {
-      p.images = imageMap[p._id.toString()] || [];
+    // ✅ 6) Lấy average rating từ Review
+    const reviewAgg = await Review.aggregate([
+      { $match: { productID: { $in: productIds } } },
+      {
+        $group: {
+          _id: "$productID",
+          averageRating: { $avg: "$rating" },
+        },
+      },
+    ]);
+
+    const ratingMap = reviewAgg.reduce((acc, item) => {
+      acc[item._id.toString()] = item.averageRating;
+      return acc;
+    }, {});
+
+    // ✅ 7) Gán images và rating vào mỗi product
+    products.forEach((p) => {
+      const key = p._id.toString();
+      p.images = imageMap[key] || [];
+      p.averageRating = Math.round((ratingMap[key] || 0) * 10) / 10;
     });
 
-    // 7) Count + trả về
+    // 8) Count + trả về
     const total = await Product.countDocuments(filter);
     res.json({
       total,
-      page:  Number(page),
+      page: Number(page),
       limit: Number(limit),
-      products
+      products,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
-
 
 // POST /api/products (thêm sản phẩm)
 router.post("/", async (req, res) => {

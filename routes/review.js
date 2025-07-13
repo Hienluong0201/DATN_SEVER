@@ -5,7 +5,7 @@ const mongoose = require('mongoose');
 const Review = require('../models/Review');
 const { uploadImage } = require('../middlewares/upload');
 // 1. Tạo mới một Review
-// POST /reviews
+// POST /reviews 
 // POST /reviews
 router.post('/', uploadImage.array('images'), async (req, res) => {
    console.log('🔥 ĐÃ VÀO ROUTE /review');
