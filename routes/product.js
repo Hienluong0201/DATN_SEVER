@@ -3,7 +3,9 @@ const mongoose = require("mongoose");
 const router = express.Router();
 const Product = require("../models/Product");
 const Review = require('../models/Review');
-const Image    = require("../models/Image");   // <-- thêm
+const Image    = require("../models/Image");  
+const Category = require("../models/Category"); // ✅ Thêm dòng này vào đầu file nếu chưa có
+
 // GET /api/products (lọc, sắp xếp, trang, và trả về ảnh)
 
 router.get("/", async (req, res) => {
@@ -150,5 +152,128 @@ router.delete("/:id", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+// routes/products.js
+router.get("/advanced-search", async (req, res) => {
+  try {
+    const {
+      categoryName,
+      name,
+      sort,
+      status,
+      page = 1,
+      limit = 10,
+      minPrice,
+      maxPrice,
+      minRating = 0,
+    } = req.query;
+
+    const filter = {};
+
+    // ✅ Nếu có tên danh mục thì tìm ID trước
+    if (categoryName) {
+      const foundCategory = await Category.findOne({ name: { $regex: categoryName.trim(), $options: "i" } });
+      if (foundCategory) {
+        filter.categoryID = foundCategory._id;
+      } else {
+        return res.json({
+          total: 0,
+          page: Number(page),
+          limit: Number(limit),
+          products: [],
+        });
+      }
+    }
+
+    // 🔍 Tìm theo tên sản phẩm
+    if (name) {
+      filter.name = { $regex: name.trim(), $options: "i" };
+    }
+
+    // Lọc status
+    if (status !== undefined) {
+      filter.status = status === "true";
+    }
+
+    // Giá
+    if (minPrice || maxPrice) {
+      filter.price = {};
+      if (minPrice) filter.price.$gte = Number(minPrice);
+      if (maxPrice) filter.price.$lte = Number(maxPrice);
+    }
+
+    // Sắp xếp
+    const sortOption = {};
+    if (sort === "price_asc") sortOption.price = 1;
+    else if (sort === "price_desc") sortOption.price = -1;
+
+    const skip = (page - 1) * limit;
+
+    // Lấy danh sách sản phẩm
+    const products = await Product.find(filter)
+     .populate('categoryID', 'name') // ✅ Lấy tên category
+      .sort(sortOption)
+      .skip(skip)
+      .limit(Number(limit))
+      .lean();
+
+    const productIds = products.map((p) => p._id);
+
+    // Ảnh
+    const host = `${req.protocol}://${req.get("host")}`;
+    const imageDocs = await Image.find({ productID: { $in: productIds } }).lean();
+    const imageMap = imageDocs.reduce((acc, img) => {
+      const key = img.productID.toString();
+      const urls = img.imageURL.map((file) =>
+        file.startsWith("http") ? file : `${host}/images/${file}`
+      );
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(...urls);
+      return acc;
+    }, {});
+
+    // Rating
+    const reviewAgg = await Review.aggregate([
+      { $match: { productID: { $in: productIds } } },
+      {
+        $group: {
+          _id: "$productID",
+          averageRating: { $avg: "$rating" },
+        },
+      },
+    ]);
+
+    const ratingMap = reviewAgg.reduce((acc, item) => {
+      acc[item._id.toString()] = item.averageRating;
+      return acc;
+    }, {});
+
+    // Gán rating + image + lọc minRating
+    const filteredProducts = products
+      .map((p) => {
+        const id = p._id.toString();
+        const avgRating = Math.round((ratingMap[id] || 0) * 10) / 10;
+        return {
+          ...p,
+          images: imageMap[id] || [],
+          averageRating: avgRating,
+        };
+      })
+      .filter((p) => p.averageRating >= Number(minRating));
+
+    const total = await Product.countDocuments(filter);
+
+    res.json({
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      products: filteredProducts,
+    });
+  } catch (err) {
+    console.error("❌ Lỗi advanced-search:", err.message);
+    res.status(500).json({ message: "Lỗi server khi lọc nâng cao." });
+  }
+});
+
 
 module.exports = router;
