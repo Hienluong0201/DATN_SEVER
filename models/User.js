@@ -7,6 +7,7 @@ const UserSchema = new Schema({
   password: { type: String, required: true },
   phone: { type: String, required: true, unique: true  },
   img: { type: String },
+  facebookId: { type: String, unique: true, sparse: true },
   role: {
     type: String,
     enum: ['user', 'admin'],
