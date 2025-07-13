@@ -7,7 +7,7 @@ const ProductSchema = new Schema({
   description: { type: String },
   price: { type: Number, required: true },
   status: { type: Boolean, default: true },
-   image:       { type: mongoose.Schema.Types.ObjectId, ref: "Img" }  // tham chiếu đến Img
+   image: { type: mongoose.Schema.Types.ObjectId, ref: "Img" }  
 }, { timestamps: true });
 
 module.exports = mongoose.model('Product', ProductSchema);
