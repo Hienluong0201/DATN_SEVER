@@ -427,4 +427,47 @@ router.put('/update/:id', upload.single('img'), async (req, res) => {
   }
 });
 
+
+router.post('/login-facebook', async (req, res) => {
+  try {
+    const { accessToken } = req.body;
+
+    if (!accessToken) {
+      return res.status(400).json({ message: 'Thiếu access token' });
+    }
+
+    // Gọi Graph API để lấy thông tin user từ Facebook
+    const fbRes = await axios.get(
+      `https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${accessToken}`
+    );
+
+    const { id, name, email, picture } = fbRes.data;
+
+    if (!id || !name) {
+      return res.status(400).json({ message: 'Dữ liệu từ Facebook không hợp lệ' });
+    }
+
+    // Kiểm tra xem user đã tồn tại chưa
+    let user = await User.findOne({ facebookId: id });
+
+    if (!user) {
+      // Nếu chưa có thì tạo mới
+      user = new User({
+        name,
+        email,
+        facebookId: id,
+        img: picture?.data?.url || '',
+        isActive: true,
+      });
+
+      await user.save();
+    }
+
+    res.json({ message: 'Đăng nhập thành công', user });
+
+  } catch (err) {
+    console.error('Lỗi login Facebook:', err);
+    res.status(500).json({ message: 'Lỗi đăng nhập bằng Facebook', error: err.message });
+  }
+});
 module.exports = router;
