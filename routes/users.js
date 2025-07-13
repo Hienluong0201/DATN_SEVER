@@ -436,7 +436,7 @@ router.post('/login-facebook', async (req, res) => {
       return res.status(400).json({ message: 'Thiếu access token' });
     }
 
-    // Gọi Graph API để lấy thông tin user từ Facebook
+    // Gọi Facebook Graph API để lấy info người dùng
     const fbRes = await axios.get(
       `https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${accessToken}`
     );
@@ -447,11 +447,10 @@ router.post('/login-facebook', async (req, res) => {
       return res.status(400).json({ message: 'Dữ liệu từ Facebook không hợp lệ' });
     }
 
-    // Kiểm tra xem user đã tồn tại chưa
-    let user = await User.findOne({ facebookId: id });
+    // Tìm user theo facebookId hoặc email
+    let user = await User.findOne({ $or: [{ facebookId: id }, { email }] });
 
     if (!user) {
-      // Nếu chưa có thì tạo mới
       user = new User({
         name,
         email,
@@ -460,6 +459,10 @@ router.post('/login-facebook', async (req, res) => {
         isActive: true,
       });
 
+      await user.save();
+    } else if (!user.facebookId) {
+      // Nếu user có email rồi nhưng chưa gắn facebookId, thì cập nhật thêm
+      user.facebookId = id;
       await user.save();
     }
 
