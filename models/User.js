@@ -4,8 +4,8 @@ const Schema = mongoose.Schema;
 const UserSchema = new Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  phone: { type: String, required: true, unique: true  },
+  password: { type: String }, // ❌ bỏ required
+  phone: { type: String, unique: true }, // ❌ bỏ required
   img: { type: String },
   facebookId: { type: String, unique: true, sparse: true },
   role: {
@@ -13,7 +13,7 @@ const UserSchema = new Schema({
     enum: ['user', 'admin'],
     default: 'user'
   },
-    isActive:           { type: Boolean, default: true },
+  isActive: { type: Boolean, default: true },
   resetPasswordCode: String,      
   resetPasswordExpires: Date,  
   otpCode: String, 
