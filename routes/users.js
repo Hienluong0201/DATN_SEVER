@@ -9,7 +9,8 @@ const multer = require('multer');
 const fs = require('fs');
 const cloudinary = require('../utils/cloudinary');
 const sharp = require('sharp');
-
+const { OAuth2Client } = require('google-auth-library');
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 // Cấu hình multer upload file tạm vào thư mục 'uploads/'
 const upload = multer({ dest: 'uploads/' });
 
@@ -471,6 +472,48 @@ router.post('/login-facebook', async (req, res) => {
   } catch (err) {
     console.error('Lỗi login Facebook:', err);
     res.status(500).json({ message: 'Lỗi đăng nhập bằng Facebook', error: err.message });
+  }
+});
+
+
+router.post('/login-google', async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) return res.status(400).json({ message: 'Thiếu idToken' });
+
+    // Verify idToken với Google
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { email, name, picture, sub: googleId } = payload;
+
+    if (!email) return res.status(400).json({ message: 'Google token không có email' });
+
+    // Tìm user theo email
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      // Tạo mới user
+      user = new User({
+        name,
+        email,
+        img: picture,
+        isActive: true,
+        // password không bắt buộc cho user đăng nhập Google
+      });
+      await user.save();
+    }
+
+    // Trả về user (ẩn password và các trường nhạy cảm)
+    const { password, resetPasswordCode, otpCode, ...userSafe } = user.toObject();
+
+    res.json({ message: 'Đăng nhập Google thành công', user: userSafe });
+  } catch (error) {
+    console.error('Lỗi đăng nhập Google:', error);
+    res.status(500).json({ message: 'Lỗi đăng nhập Google', error: error.message });
   }
 });
 module.exports = router;
