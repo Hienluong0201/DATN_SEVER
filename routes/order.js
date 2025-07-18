@@ -81,12 +81,19 @@ router.post("/zalopay", async (req, res) => {
 
     // Gửi request tới ZaloPay
     const response = await axios.post(zaloPayConfig.endpoint, order);
-    res.json(response.data);
+
+    // Trả về cho client: tất cả data ZaloPay trả về, và thêm app_trans_id
+    res.json({
+      ...response.data,
+      app_trans_id: order.app_trans_id
+    });
+
   } catch (e) {
     console.error('ZaloPay Error:', e.response ? e.response.data : e.message);
     res.status(500).json({ error: e.message });
   }
 });
+
 
 // GET /order
 // → Lấy tất cả đơn, sort mới nhất, populate user, payment, voucher, và variant->product
@@ -130,8 +137,27 @@ router.get("/", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+// kiểm tra thanh toán zalopay
+router.post("/zalopay-status", async (req, res) => {
+  try {
+    const { app_trans_id } = req.body;
 
+    if (!app_trans_id) return res.status(400).json({ error: "Thiếu app_trans_id" });
 
+    const payload = {
+      app_id: zaloPayConfig.app_id,
+      app_trans_id: app_trans_id,
+    };
+
+    const data = `${zaloPayConfig.app_id}|${app_trans_id}|${zaloPayConfig.key1}`;
+    payload.mac = crypto.createHmac("sha256", zaloPayConfig.key1).update(data).digest("hex");
+
+    const response = await axios.post('https://sb-openapi.zalopay.vn/v2/query', payload);
+    res.json(response.data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // GET /order/user/:userId
 // → Lấy tất cả đơn theo user, mới nhất trước
 router.get("/user/:userId", async (req, res) => {
