@@ -140,24 +140,40 @@ router.get("/", async (req, res) => {
 // kiểm tra thanh toán zalopay
 router.post("/zalopay-status", async (req, res) => {
   try {
-    const { app_trans_id } = req.body;
+    const { app_trans_id, orderId } = req.body; // orderId để update DB
 
     if (!app_trans_id) return res.status(400).json({ error: "Thiếu app_trans_id" });
 
+    // Call ZaloPay
     const payload = {
       app_id: zaloPayConfig.app_id,
       app_trans_id: app_trans_id,
     };
-
     const data = `${zaloPayConfig.app_id}|${app_trans_id}|${zaloPayConfig.key1}`;
     payload.mac = crypto.createHmac("sha256", zaloPayConfig.key1).update(data).digest("hex");
 
     const response = await axios.post('https://sb-openapi.zalopay.vn/v2/query', payload);
+
+    // Nếu đơn hàng chưa thanh toán và quá 15 phút thì update DB
+    if (orderId) {
+      const order = await Order.findById(orderId);
+      if (order && order.orderStatus === "pending") {
+        const now = new Date();
+        const created = new Date(order.createdAt);
+        // Kiểm tra đã quá 15 phút chưa
+        if (response.data.return_code !== 1 && now - created > 15*60*1000) {
+          order.orderStatus = "cancelled";
+          await order.save();
+        }
+      }
+    }
+
     res.json(response.data);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 // GET /order/user/:userId
 // → Lấy tất cả đơn theo user, mới nhất trước
 router.get("/user/:userId", async (req, res) => {
