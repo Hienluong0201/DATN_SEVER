@@ -9,7 +9,9 @@ const PaymentSchema = new Schema({
   paymentMethod: { type: String, required: true },
   paymentGateway: { type: String },
   status: { type: String, default: 'pending' },
+  app_trans_id: { type: String }, 
   createdAt: { type: Date, default: Date.now }
+  
 }, { timestamps: true });
 
 module.exports = mongoose.model('Payment', PaymentSchema);

@@ -17,12 +17,19 @@ router.get('/', async (req, res) => {
 // Gửi tin nhắn mới
 router.post('/', async (req, res) => {
   try {
-    const { userID, sender, text } = req.body;
-    if (!userID || !sender || !text) {
+    const { userID, sender, text = '', type = 'text', orderInfo = null, productInfo = null } = req.body;
+    if (!userID || !sender) {
       return res.status(400).json({ message: 'Thiếu dữ liệu' });
     }
 
-    const message = new Message({ userID, sender, text });
+    const message = new Message({
+      userID,
+      sender,
+      text,
+      type,
+      orderInfo: type === 'order' ? orderInfo : null,
+      productInfo: type === 'product' ? productInfo : null
+    });
     await message.save();
 
     // phát socket realtime
