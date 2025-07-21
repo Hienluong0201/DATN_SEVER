@@ -13,6 +13,47 @@ const axios = require("axios");
 require('dotenv').config(); 
 const Stripe = require("stripe");
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+const cron = require('node-cron');
+
+// Chạy mỗi 15 phút
+cron.schedule('*/15 * * * *', async () => {
+  console.log('[CRON] Đang kiểm tra các đơn ZaloPay chưa thanh toán quá 15 phút...');
+
+  // Lấy các đơn ZaloPay còn "pending", đã tạo quá 15 phút
+  const now = new Date();
+  const FIFTEEN_MIN = 15 * 60 * 1000;
+  const orders = await Order.find({
+    orderStatus: 'pending',
+    'paymentID.paymentMethod': 'ZaloPay',
+    createdAt: { $lte: new Date(now.getTime() - FIFTEEN_MIN) }
+  }).populate('paymentID');
+
+  for (const order of orders) {
+    // Gọi ZaloPay kiểm tra trạng thái
+    const app_trans_id = order.paymentID.app_trans_id; // bạn cần lưu app_trans_id này khi tạo paymentID!
+    if (!app_trans_id) continue;
+    try {
+      const payload = {
+        app_id: zaloPayConfig.app_id,
+        app_trans_id,
+      };
+      const data = `${zaloPayConfig.app_id}|${app_trans_id}|${zaloPayConfig.key1}`;
+      payload.mac = crypto.createHmac("sha256", zaloPayConfig.key1).update(data).digest("hex");
+
+      const response = await axios.post('https://sb-openapi.zalopay.vn/v2/query', payload);
+      const status = response.data.return_code;
+
+      // Nếu chưa thanh toán (return_code != 1)
+      if (status !== 1) {
+        order.orderStatus = "cancelled";
+        await order.save();
+        console.log(`[CRON] Đã huỷ đơn hàng #${order._id} vì quá 15p chưa thanh toán.`);
+      }
+    } catch (e) {
+      console.error(`[CRON] Lỗi kiểm tra đơn #${order._id}:`, e.message);
+    }
+  }
+});
 //thanh toán và stripe
 router.post("/stripe-payment-intent", async (req, res) => {
   try {
