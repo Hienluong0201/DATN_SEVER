@@ -35,16 +35,17 @@ router.get("/", async (req, res) => {
       .sort(sortOption)
       .skip(skip)
       .limit(Number(limit))
-      .lean(); // lean để dễ gán thêm thuộc tính
+      .lean();
 
-    // 4) Lấy tất cả ảnh của các product này
+    // 4) Lấy tất cả ảnh và video của các product này
     const productIds = products.map((p) => p._id);
     const imageDocs = await Image.find({
       productID: { $in: productIds },
     }).lean();
 
-    // 5) Gom nhóm imageURL theo productID
+    // 5) Gom nhóm imageURL & videoURL theo productID
     const host = `${req.protocol}://${req.get("host")}`;
+    // Map ảnh
     const imageMap = imageDocs.reduce((acc, img) => {
       const key = img.productID.toString();
       const urls = img.imageURL.map((file) =>
@@ -54,8 +55,18 @@ router.get("/", async (req, res) => {
       acc[key].push(...urls);
       return acc;
     }, {});
+    // Map video
+    const videoMap = imageDocs.reduce((acc, img) => {
+      const key = img.productID.toString();
+      const urls = (img.videoURL || []).map((file) =>
+        file.startsWith("http") ? file : `${host}/videos/${file}`
+      );
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(...urls);
+      return acc;
+    }, {});
 
-    // ✅ 6) Lấy average rating từ Review
+    // Lấy average rating từ Review
     const reviewAgg = await Review.aggregate([
       { $match: { productID: { $in: productIds } } },
       {
@@ -71,14 +82,15 @@ router.get("/", async (req, res) => {
       return acc;
     }, {});
 
-    // ✅ 7) Gán images và rating vào mỗi product
+    // Gán images, videos và rating vào mỗi product
     products.forEach((p) => {
       const key = p._id.toString();
       p.images = imageMap[key] || [];
+      p.videos = videoMap[key] || [];
       p.averageRating = Math.round((ratingMap[key] || 0) * 10) / 10;
     });
 
-    // 8) Count + trả về
+    // Count + trả về
     const total = await Product.countDocuments(filter);
     res.json({
       total,
