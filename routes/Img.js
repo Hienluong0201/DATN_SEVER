@@ -3,7 +3,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const router = express.Router();
 const Image = require("../models/Image");
-const { uploadImage } = require('../middlewares/upload'); // Đúng path file export uploadImage của bạn
+const { uploadImage,uploadVideo } = require('../middlewares/upload'); // Đúng path file export uploadImage của bạn
 
 // GET /api/images?productID=...
 router.get("/", async (req, res) => {
@@ -30,7 +30,7 @@ router.get("/", async (req, res) => {
 // POST /api/images
 router.post("/", async (req, res) => {
   try {
-    const { productID, imageURL } = req.body;
+    const { productID, imageURL, videoURL = [] } = req.body;
 
     if (!productID || !mongoose.Types.ObjectId.isValid(productID)) {
       return res.status(400).json({ message: "productID không hợp lệ." });
@@ -42,10 +42,14 @@ router.post("/", async (req, res) => {
     ) {
       return res.status(400).json({ message: "imageURL phải là mảng các chuỗi." });
     }
+    if (videoURL && (!Array.isArray(videoURL) || videoURL.some((url) => typeof url !== "string"))) {
+      return res.status(400).json({ message: "videoURL phải là mảng các chuỗi." });
+    }
 
     const newImage = await Image.create({
       productID: new mongoose.Types.ObjectId(productID),
       imageURL,
+      videoURL,
     });
 
     res.status(201).json(newImage);
@@ -54,6 +58,39 @@ router.post("/", async (req, res) => {
   }
 });
 
+router.post(
+  '/upload-video',
+  uploadVideo.array('videos', 3), // Có thể đổi '3' tuỳ số lượng tối đa cho phép
+  async (req, res) => {
+    try {
+      const { productID } = req.body;
+
+      // Kiểm tra productID hợp lệ
+      if (!productID || !mongoose.Types.ObjectId.isValid(productID)) {
+        return res.status(400).json({ message: 'productID không hợp lệ.' });
+      }
+
+      const files = req.files || [];
+      if (files.length === 0) {
+        return res.status(400).json({ message: 'Chưa có video nào được upload.' });
+      }
+
+      // Lấy đường dẫn video trả về từ Cloudinary
+      const videoURL = files.map((file) => file.path);
+
+      // Có thể tạo mới hoặc update record. Ví dụ tạo mới:
+      const newRecord = await Image.create({
+        productID,
+        imageURL: [],
+        videoURL,
+      });
+
+      res.status(201).json(newRecord); // trả về cả link video trong response
+    } catch (err) {
+      res.status(500).json({ message: 'Lỗi server: ' + err.message });
+    }
+  }
+);
 // routes/images.js
 router.put("/:id", async (req, res) => {
   try {
