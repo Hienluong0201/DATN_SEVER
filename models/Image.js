@@ -9,14 +9,13 @@ const ImageSchema = new Schema({
   },
   imageURL: { 
     type: [String], // Mảng các đường dẫn ảnh
-    required: true,
-    validate: {
-      validator: function(urls) {
-        // Đảm bảo mảng có ít nhất 1 phần tử
-        return urls && urls.length > 0;
-      },
-      message: 'Phải có ít nhất một đường dẫn ảnh'
-    }
+    default: [],    // Mặc định là mảng rỗng
+    required: false // Không bắt buộc
+  },
+  videoURL: {
+    type: [String], // Mảng các đường dẫn video
+    default: [],    // Mặc định là mảng rỗng
+    required: false // Không bắt buộc
   }
 }, { timestamps: true });
 
