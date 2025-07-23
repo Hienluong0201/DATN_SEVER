@@ -16,44 +16,45 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const cron = require('node-cron');
 
 // Chạy mỗi 15 phút
-cron.schedule('*/15 * * * *', async () => {
-  console.log('[CRON] Đang kiểm tra các đơn ZaloPay chưa thanh toán quá 15 phút...');
+cron.schedule('*/15 * * * *', async () => { // chạy mỗi 15 phút
+  console.log('[CRON] Đang kiểm tra và huỷ các đơn ZaloPay pending quá 15 phút...');
 
-  // Lấy các đơn ZaloPay còn "pending", đã tạo quá 15 phút
-  const now = new Date();
+  const now = Date.now();
   const FIFTEEN_MIN = 15 * 60 * 1000;
-  const orders = await Order.find({
-    orderStatus: 'pending',
-    'paymentID.paymentMethod': 'ZaloPay',
-    createdAt: { $lte: new Date(now.getTime() - FIFTEEN_MIN) }
-  }).populate('paymentID');
 
-  for (const order of orders) {
-    // Gọi ZaloPay kiểm tra trạng thái
-    const app_trans_id = order.paymentID.app_trans_id; // bạn cần lưu app_trans_id này khi tạo paymentID!
-    if (!app_trans_id) continue;
-    try {
-      const payload = {
-        app_id: zaloPayConfig.app_id,
-        app_trans_id,
-      };
-      const data = `${zaloPayConfig.app_id}|${app_trans_id}|${zaloPayConfig.key1}`;
-      payload.mac = crypto.createHmac("sha256", zaloPayConfig.key1).update(data).digest("hex");
+  // 1. Lấy tất cả đơn pending
+  let orders = await Order.find({ orderStatus: "pending" }).populate("paymentID");
 
-      const response = await axios.post('https://sb-openapi.zalopay.vn/v2/query', payload);
-      const status = response.data.return_code;
+  // 2. Lọc lại đơn có paymentMethod là ZaloPay
+  orders = orders.filter(order =>
+    order.paymentID && order.paymentID.paymentMethod === "ZaloPay"
+  );
 
-      // Nếu chưa thanh toán (return_code != 1)
-      if (status !== 1) {
-        order.orderStatus = "cancelled";
-        await order.save();
-        console.log(`[CRON] Đã huỷ đơn hàng #${order._id} vì quá 15p chưa thanh toán.`);
+  // 3. Lọc đơn quá 15 phút
+  const ordersToCancel = orders.filter(order =>
+    now - new Date(order.createdAt).getTime() >= FIFTEEN_MIN
+  );
+
+  for (const order of ordersToCancel) {
+    console.log("[CRON] Chuẩn bị huỷ đơn:", order._id);
+    order.orderStatus = "cancelled";
+    await order.save();
+    console.log("[CRON] Đã huỷ xong đơn:", order._id);
+
+    // Hoàn kho nếu có items
+    if (order.items && order.items.length > 0) {
+      for (const item of order.items) {
+        await ProductVariant.findByIdAndUpdate(
+          item.variantID,
+          { $inc: { stock: item.quantity } }
+        );
       }
-    } catch (e) {
-      console.error(`[CRON] Lỗi kiểm tra đơn #${order._id}:`, e.message);
     }
+
+    console.log(`[CRON] Đã huỷ đơn hàng #${order._id} do pending quá 15 phút!`);
   }
 });
+
 //thanh toán và stripe
 router.post("/stripe-payment-intent", async (req, res) => {
   try {
@@ -225,6 +226,38 @@ router.get("/user/:userId", async (req, res) => {
       .populate("voucher")
       .sort({ createdAt: -1 });
     res.json(orders);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+// GET /order/unpaid-zalopay
+// -> Lấy tất cả đơn hàng ZaloPay chưa thanh toán (pending)
+router.get("/unpaid-zalopay", async (req, res) => {
+  try {
+    // Nếu muốn lọc theo thời gian (ví dụ: quá 15 phút), có thể lấy query minutes trên URL
+    let { minutes = 0 } = req.query; // minutes = 0 nghĩa là không lọc theo thời gian
+    minutes = parseInt(minutes);
+
+    // Lấy các đơn ZaloPay đang pending
+    let orders = await Order.find({
+      orderStatus: 'pending'
+    }).populate('paymentID');
+
+    // Lọc lại đơn có paymentMethod là ZaloPay
+    orders = orders.filter(order =>
+      order.paymentID &&
+      order.paymentID.paymentMethod === "ZaloPay"
+    );
+
+    // Nếu truyền minutes, lọc tiếp đơn đã tạo quá X phút
+    if (minutes > 0) {
+      const now = Date.now();
+      orders = orders.filter(order => 
+        now - new Date(order.createdAt).getTime() >= minutes * 60 * 1000
+      );
+    }
+
+    res.json({ orders, total: orders.length });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
