@@ -50,8 +50,17 @@ router.post("/", uploadImage.array("images", 5), async (req, res) => {
     if (!productID || stock === undefined)
       return res.status(400).json({ message: "Thiếu productID hoặc stock." });
 
-    // Lấy các link ảnh đã up lên Cloudinary
-    const images = req.files ? req.files.map(file => file.path) : [];
+    // images cũ FE gửi url (ít gặp ở POST)
+    let images = [];
+    if (req.body.images) {
+      if (Array.isArray(req.body.images)) images = req.body.images;
+      else images = [req.body.images];
+    }
+
+    // ảnh mới upload (file)
+    if (req.files && req.files.length > 0) {
+      images = images.concat(req.files.map(file => file.path));
+    }
 
     const newVariant = new ProductVariant({ productID, size, color, stock, images });
     const saved = await newVariant.save();
@@ -73,17 +82,27 @@ router.put("/:id", uploadImage.array("images", 5), async (req, res) => {
     const variant = await ProductVariant.findById(id);
     if (!variant) return res.status(404).json({ message: "Không tìm thấy biến thể." });
 
-    // Nếu có ảnh mới upload
-    if (req.files && req.files.length > 0) {
-      variant.images = req.files.map(file => file.path);
-    } else if (req.body.images) {
-      // Nếu gửi mảng images (giữ lại ảnh cũ, hoặc bỏ bớt ảnh)
-      // Nếu FE gửi về là string (1 ảnh) thì convert về array
-      variant.images = Array.isArray(req.body.images) ? req.body.images : [req.body.images];
+    // images url cũ FE muốn giữ lại
+    let images = [];
+    if (req.body.images) {
+      if (Array.isArray(req.body.images)) images = req.body.images;
+      else images = [req.body.images];
     }
 
-    // Update các trường khác
-    Object.assign(variant, req.body);
+    // file mới upload (cloudinary trả về url)
+    if (req.files && req.files.length > 0) {
+      images = images.concat(req.files.map(file => file.path));
+    }
+
+    // Gán lại images (luôn là array các url)
+    variant.images = images;
+
+    // Update các trường khác (trừ images đã xử lý riêng)
+    if (req.body.size !== undefined) variant.size = req.body.size;
+    if (req.body.color !== undefined) variant.color = req.body.color;
+    if (req.body.stock !== undefined) variant.stock = req.body.stock;
+    if (req.body.productID !== undefined) variant.productID = req.body.productID;
+
     const updated = await variant.save();
     await updated.populate("productID");
     res.json(updated);
