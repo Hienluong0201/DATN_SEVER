@@ -5,13 +5,13 @@ const VoucherSchema = new Schema({
   code: {
     type: String,
     required: true,
-    unique: true,     // unique sẽ tự tạo index duy nhất cho code
+    unique: true,     
     uppercase: true,
     trim: true
   },
   discountType: {
     type: String,
-    enum: ['percent', 'fixed'],   // percent = giảm %, fixed = giảm tiền cố định
+    enum: ['percent', 'fixed'],   
     required: true
   },
   discountValue: {
@@ -47,6 +47,10 @@ const VoucherSchema = new Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  isPublic: {
+    type: Boolean,
+    default: false   // Thêm dòng này để quản lý hiện/ẩn trên shop voucher!
   }
 }, { timestamps: true });
 
