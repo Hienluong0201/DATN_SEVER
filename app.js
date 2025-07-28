@@ -24,7 +24,7 @@ var messageRouter = require('./routes/message');
 const videoRouter = require('./routes/video');
 var statisticsRoter = require('./routes/revenuestat');
 var voucherRouter = require('./routes/voucher');
-
+var voucherRouterDetail = require('./routes/voucherDetail')
 var app = express();
 
 var cors = require('cors');
@@ -75,6 +75,7 @@ app.use('/messages', messageRouter);
 app.use('/api/v1/videos', videoRouter);
 app.use('/statistics',statisticsRoter);
 app.use('/voucher',voucherRouter);
+app.use('/voucherDetail',voucherRouterDetail);
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
   next(createError(404));
