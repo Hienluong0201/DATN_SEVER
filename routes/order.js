@@ -496,6 +496,40 @@ router.delete("/:id", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+// PATCH /order/:id/change-method
+// → Dùng để đổi phương thức thanh toán sang COD (tiền mặt)
+router.patch("/:id/change-method", async (req, res) => {
+  try {
+    const { method = "COD" } = req.body;
+
+    // Kiểm tra method hợp lệ
+    const allowedMethods = ["COD"];
+    if (!allowedMethods.includes(method)) {
+      return res.status(400).json({ message: "Phương thức không hỗ trợ chuyển đổi." });
+    }
+
+    const order = await Order.findById(req.params.id).populate("paymentID");
+    if (!order) return res.status(404).json({ message: "Không tìm thấy đơn hàng." });
+
+    // Chỉ cho phép đổi nếu chưa thanh toán và vẫn đang pending
+    if (order.orderStatus !== "pending") {
+      return res.status(400).json({ message: "Đơn hàng đã xử lý, không thể đổi phương thức." });
+    }
+
+    if (order.paymentID.isPaid) {
+      return res.status(400).json({ message: "Đơn hàng đã thanh toán, không thể đổi phương thức." });
+    }
+
+    // Cập nhật payment
+    order.paymentID.paymentMethod = method;
+    order.paymentID.isPaid = false;
+    await order.paymentID.save();
+
+    res.json({ message: "Đã cập nhật sang thanh toán tiền mặt (COD).", order });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 module.exports = router;
 
