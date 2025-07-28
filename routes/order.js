@@ -500,10 +500,10 @@ router.delete("/:id", async (req, res) => {
 // → Dùng để đổi phương thức thanh toán sang COD (tiền mặt)
 router.patch("/:id/change-method", async (req, res) => {
   try {
-    const { method = "COD" } = req.body;
+    const { method = "Tiền mặt" } = req.body;
 
     // Kiểm tra method hợp lệ
-    const allowedMethods = ["COD"];
+    const allowedMethods = ["Tiền mặt"];
     if (!allowedMethods.includes(method)) {
       return res.status(400).json({ message: "Phương thức không hỗ trợ chuyển đổi." });
     }
