@@ -17,7 +17,7 @@ const cron = require('node-cron');
 
 // Chạy mỗi 15 phút
 cron.schedule('*/15 * * * *', async () => { // chạy mỗi 15 phút
-  console.log('[CRON] Đang kiểm tra và huỷ các đơn ZaloPay pending quá 15 phút...');
+  console.log('[CRON] Đang kiểm tra và huỷ các đơn pending quá 15 phút...');
 
   const now = Date.now();
   const FIFTEEN_MIN = 15 * 60 * 1000;
@@ -25,9 +25,10 @@ cron.schedule('*/15 * * * *', async () => { // chạy mỗi 15 phút
   // 1. Lấy tất cả đơn pending
   let orders = await Order.find({ orderStatus: "pending" }).populate("paymentID");
 
-  // 2. Lọc lại đơn có paymentMethod là ZaloPay
+  // 2. Lọc lại đơn có paymentMethod là ZaloPay HOẶC Stripe
+  const includedMethods = ["ZaloPay", "Stripe"];
   orders = orders.filter(order =>
-    order.paymentID && order.paymentID.paymentMethod === "ZaloPay"
+    order.paymentID && includedMethods.includes(order.paymentID.paymentMethod)
   );
 
   // 3. Lọc đơn quá 15 phút
@@ -54,6 +55,7 @@ cron.schedule('*/15 * * * *', async () => { // chạy mỗi 15 phút
     console.log(`[CRON] Đã huỷ đơn hàng #${order._id} do pending quá 15 phút!`);
   }
 });
+
 
 //thanh toán và stripe
 router.post("/stripe-payment-intent", async (req, res) => {
@@ -232,21 +234,21 @@ router.get("/user/:userId", async (req, res) => {
 });
 // GET /order/unpaid-zalopay
 // -> Lấy tất cả đơn hàng ZaloPay chưa thanh toán (pending)
-router.get("/unpaid-zalopay", async (req, res) => {
+router.get("/unpaid-gateway-orders", async (req, res) => {
   try {
-    // Nếu muốn lọc theo thời gian (ví dụ: quá 15 phút), có thể lấy query minutes trên URL
     let { minutes = 0 } = req.query; // minutes = 0 nghĩa là không lọc theo thời gian
     minutes = parseInt(minutes);
 
-    // Lấy các đơn ZaloPay đang pending
+    // Lấy các đơn đang pending (chưa thanh toán)
     let orders = await Order.find({
       orderStatus: 'pending'
     }).populate('paymentID');
 
-    // Lọc lại đơn có paymentMethod là ZaloPay
+    // Chỉ lấy các đơn có phương thức ZaloPay hoặc Stripe
+    const includedMethods = ["ZaloPay", "Stripe"];
     orders = orders.filter(order =>
       order.paymentID &&
-      order.paymentID.paymentMethod === "ZaloPay"
+      includedMethods.includes(order.paymentID.paymentMethod)
     );
 
     // Nếu truyền minutes, lọc tiếp đơn đã tạo quá X phút
