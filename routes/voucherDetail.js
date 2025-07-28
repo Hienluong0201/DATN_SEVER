@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const VoucherDetail = require('../models/voucherDetail');
+const VoucherDetail = require('../models/VorcherDetail');
 const Voucher = require('../models/Voucher');
 
 
