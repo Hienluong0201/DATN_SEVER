@@ -18,7 +18,7 @@ router.get('/public', async (req, res) => {
     const now = new Date();
     const vouchers = await Voucher.find({
       isActive: true,
-      isPublic: true,            // chỉ voucher công khai mới hiện ra shop
+      isPublic: true,           
       validFrom: { $lte: now },
       validTo: { $gte: now }
     }).sort({ createdAt: -1 });
