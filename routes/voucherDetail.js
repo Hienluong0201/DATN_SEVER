@@ -70,5 +70,58 @@ router.post('/use/:voucherDetailId', async (req, res) => {
   }
 });
 
+// MINI GAME: Quay số random nhận voucher
+// POST /voucherDetail/spin
+router.post('/spin', async (req, res) => {
+  const { userId } = req.body;
+
+  if (!userId) return res.status(400).json({ message: 'Thiếu userId!' });
+
+  // Xác suất trúng (vd: 30%)
+  const win = Math.random() < 0.3;
+
+  if (!win) {
+    return res.json({ win: false, message: 'Bạn chưa trúng, thử lại nhé!' });
+  }
+
+  // Lấy voucher tổng còn hạn, còn lượt
+  const now = new Date();
+  const vouchers = await Voucher.find({
+    isActive: true,
+    validFrom: { $lte: now },
+    validTo: { $gte: now },
+    usageLimit: { $gt: 0 }
+  });
+
+  if (!vouchers.length) {
+    return res.json({ win: false, message: 'Hiện tại chưa có voucher nào để phát, quay lại sau nhé!' });
+  }
+
+  // Chọn random 1 voucher trong danh sách
+  const randomVoucher = vouchers[Math.floor(Math.random() * vouchers.length)];
+
+  // Kiểm tra user đã nhận voucher này chưa
+  const existed = await VoucherDetail.findOne({ user: userId, voucher: randomVoucher._id });
+  if (existed) {
+    return res.json({ win: true, message: `Bạn đã từng nhận voucher này (${randomVoucher.code}), xem lại trong ví voucher của bạn nhé!` });
+  }
+
+  // Phát voucher cho user
+  await VoucherDetail.create({
+    user: userId,
+    voucher: randomVoucher._id
+  });
+
+  res.json({ 
+    win: true, 
+    message: `Chúc mừng bạn đã trúng voucher ${randomVoucher.code}! Xem lại trong ví voucher của bạn.`,
+    voucher: {
+      code: randomVoucher.code,
+      discountValue: randomVoucher.discountValue,
+      discountType: randomVoucher.discountType,
+      validTo: randomVoucher.validTo
+    }
+  });
+});
 
 module.exports = router;
