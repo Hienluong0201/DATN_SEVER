@@ -13,6 +13,21 @@ router.post('/', async (req, res, next) => {
     next(err);
   }
 });
+router.get('/public', async (req, res) => {
+  try {
+    const now = new Date();
+    const vouchers = await Voucher.find({
+      isActive: true,
+      isPublic: true,            // chỉ voucher công khai mới hiện ra shop
+      validFrom: { $lte: now },
+      validTo: { $gte: now }
+    }).sort({ createdAt: -1 });
+
+    res.json({ data: vouchers });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi khi lấy voucher public', error: err.message });
+  }
+});
 
 // 2. Lấy danh sách voucher (filter, search, phân trang)
 // GET /api/vouchers?active=true&page=1&limit=20&search=CODE
@@ -225,6 +240,20 @@ router.get('/:id/history', async (req, res, next) => {
     next(err);
   }
 });
+router.get('/public', async (req, res) => {
+  try {
+    const now = new Date();
+    const vouchers = await Voucher.find({
+      isActive: true,
+      isPublic: true,            // chỉ voucher công khai mới hiện ra shop
+      validFrom: { $lte: now },
+      validTo: { $gte: now }
+    }).sort({ createdAt: -1 });
 
+    res.json({ data: vouchers });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi khi lấy voucher public', error: err.message });
+  }
+});
 
 module.exports = router;
