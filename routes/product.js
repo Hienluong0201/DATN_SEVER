@@ -4,7 +4,7 @@ const router = express.Router();
 const Product = require("../models/Product");
 const Review = require('../models/Review');
 const Image    = require("../models/Image");  
-const Category = require("../models/Category"); // ✅ Thêm dòng này vào đầu file nếu chưa có
+const Category = require("../models/Category"); 
 
 // GET /api/products (lọc, sắp xếp, trang, và trả về ảnh)
 
@@ -284,6 +284,25 @@ router.get("/advanced-search", async (req, res) => {
   } catch (err) {
     console.error("❌ Lỗi advanced-search:", err.message);
     res.status(500).json({ message: "Lỗi server khi lọc nâng cao." });
+  }
+});
+// PATCH /api/products/:id/status  (Ẩn/Hiện sản phẩm)
+router.patch("/:id/status", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body; // true (hiện) hoặc false (ẩn)
+    if (typeof status !== "boolean") {
+      return res.status(400).json({ message: "Status phải là true hoặc false." });
+    }
+    const product = await Product.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    );
+    if (!product) return res.status(404).json({ message: "Không tìm thấy sản phẩm." });
+    res.json({ message: status ? "Sản phẩm đã được hiện/bật bán." : "Sản phẩm đã được ẩn/ngừng bán.", product });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 
