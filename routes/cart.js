@@ -67,38 +67,60 @@ router.patch("/:id/decrease", async (req, res) => {
 });
 
 
-// Thêm sản phẩm vào giỏ (KHÔNG trừ tồn kho)
+// Thêm sản phẩm vào giỏ (KHÔNG trừ tồn kho) — CHẶN VƯỢT TỒN KHO KHI CỘNG DỒN
 router.post("/", async (req, res) => {
   try {
     const { userID, productVariant, soluong } = req.body;
 
-    if (!userID || !productVariant || !soluong)
-      return res.status(400).json({ message: "Thiếu dữ liệu." });
-
-    const variant = await ProductVariant.findById(productVariant);
-    if (!variant)
-      return res.status(404).json({ message: "Không tìm thấy variant." });
-
-    if (variant.stock < soluong)
-      return res.status(400).json({ message: "Không đủ tồn kho." });
-
-    // Kiểm tra nếu sản phẩm đã có trong giỏ thì cộng dồn
-    const existingCartItem = await Cart.findOne({ userID, productVariant });
-    if (existingCartItem) {
-      existingCartItem.soluong += soluong;
-      await existingCartItem.save();
-      return res.json({ message: "Đã cập nhật số lượng.", cartItem: existingCartItem });
+    if (!userID || !productVariant || !soluong || soluong <= 0) {
+      return res.status(400).json({ message: "Thiếu dữ liệu hoặc số lượng không hợp lệ." });
     }
 
-    // Thêm mới
+    const variant = await ProductVariant.findById(productVariant).select("stock");
+    if (!variant) return res.status(404).json({ message: "Không tìm thấy variant." });
+
+    // Số lượng đã có trong giỏ cho user + variant này
+    const existing = await Cart.findOne({ userID, productVariant }).select("soluong");
+    const existingQty = existing?.soluong ?? 0;
+
+    const maxAddable = variant.stock - existingQty;
+    if (maxAddable <= 0) {
+      return res.status(409).json({
+        code: "OUT_OF_STOCK_FOR_CART",
+        message: "Bạn đã thêm tối đa theo tồn kho.",
+        maxAddable: 0
+      });
+    }
+    if (soluong > maxAddable) {
+      return res.status(409).json({
+        code: "EXCEEDS_STOCK",
+        message: `Chỉ có thể thêm tối đa ${maxAddable} sản phẩm nữa.`,
+        maxAddable
+      });
+    }
+
+    // Cộng dồn hoặc tạo mới
+    if (existing) {
+      existing.soluong += soluong;
+      await existing.save();
+      return res.json({ message: "Đã cập nhật số lượng.", cartItem: existing });
+    }
+
     const newCartItem = new Cart({ userID, productVariant, soluong });
     await newCartItem.save();
-
-    res.status(201).json(newCartItem);
+    return res.status(201).json(newCartItem);
   } catch (err) {
+    // Phòng trường hợp race tạo trùng (do unique index)
+    if (err.code === 11000) {
+      return res.status(409).json({
+        code: "DUPLICATE_ITEM",
+        message: "Sản phẩm đã có trong giỏ, vui lòng thử lại."
+      });
+    }
     res.status(500).json({ message: err.message });
   }
 });
+
 
 // Cập nhật số lượng trong giỏ (KHÔNG trừ tồn kho)
 router.put("/:id", async (req, res) => {
