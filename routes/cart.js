@@ -66,8 +66,7 @@ router.patch("/:id/decrease", async (req, res) => {
   }
 });
 
-
-// Thêm sản phẩm vào giỏ (KHÔNG trừ tồn kho) — CHẶN VƯỢT TỒN KHO KHI CỘNG DỒN
+// Thêm sản phẩm vào giỏ (KHÔNG trừ tồn kho)
 router.post("/", async (req, res) => {
   try {
     const { userID, productVariant, soluong } = req.body;

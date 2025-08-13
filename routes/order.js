@@ -530,6 +530,113 @@ router.patch("/:id/change-method", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+// POST /order/:id/retry-payment
+router.post("/:id/retry-payment", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { paymentMethod } = req.body;
+    const allowedMethods = ["ZaloPay", "Stripe"];
+    if (!allowedMethods.includes(paymentMethod)) {
+      await session.abortTransaction(); session.endSession();
+      return res.status(400).json({ message: "Phương thức thanh toán phải là ZaloPay hoặc Stripe." });
+    }
+
+    const order = await Order.findById(req.params.id).populate("paymentID").session(session);
+    if (!order) { await session.abortTransaction(); session.endSession(); return res.status(404).json({ message: "Không tìm thấy đơn hàng." }); }
+    if (order.orderStatus !== "pending") { await session.abortTransaction(); session.endSession(); return res.status(400).json({ message: "Đơn không ở trạng thái pending." }); }
+
+    const payment = order.paymentID;
+    if (!payment) { await session.abortTransaction(); session.endSession(); return res.status(400).json({ message: "Đơn chưa có payment." }); }
+    if (payment.isPaid) { await session.abortTransaction(); session.endSession(); return res.status(400).json({ message: "Đơn đã thanh toán, không thể retry." }); }
+
+    const amount = Math.floor(order.finalTotal);
+    if (!amount || amount <= 0) { await session.abortTransaction(); session.endSession(); return res.status(400).json({ message: "Số tiền không hợp lệ." }); }
+
+    let paymentResponse = {};
+
+    if (paymentMethod === "ZaloPay") {
+      const app_trans_id = generateAppTransId();
+      const zpOrder = {
+        app_id: zaloPayConfig.app_id,
+        app_trans_id,
+        app_user: order.userID ? String(order.userID) : "anonymous",
+        app_time: Date.now(),
+        amount,
+        item: JSON.stringify([]), // tránh gửi cấu trúc items nội bộ
+        embed_data: JSON.stringify({ orderId: String(order._id) }),
+        description: `Retry ZaloPay cho đơn #${order._id} (${amount} VND)`,
+        bank_code: "",
+        callback_url: zaloPayConfig.callback_url, // đảm bảo đã có trong config
+      };
+      const macData = [
+        zpOrder.app_id,
+        zpOrder.app_trans_id,
+        zpOrder.app_user,
+        zpOrder.amount,
+        zpOrder.app_time,
+        zpOrder.embed_data,
+        zpOrder.item
+      ].join("|");
+      zpOrder.mac = crypto.createHmac("sha256", zaloPayConfig.key1).update(macData).digest("hex");
+
+      const zpRes = await axios.post(zaloPayConfig.endpoint, zpOrder);
+
+      // cập nhật payment
+      payment.paymentMethod = "ZaloPay";
+      payment.isPaid = false;
+      payment.app_trans_id = app_trans_id;   // dùng field này thay vì transactionId
+      payment.status = "pending";
+      await payment.save({ session });
+
+      paymentResponse = { ...zpRes.data, app_trans_id };
+    } else {
+      // Stripe: tái sử dụng PI nếu có; nếu PI cũ bị canceled -> tạo mới
+      let pi = null;
+      if (payment.stripePaymentIntentId) {
+        pi = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
+        if (pi.status === "canceled") pi = null;
+        else if (["requires_payment_method", "requires_action", "requires_confirmation", "processing"].includes(pi.status)) {
+          await session.commitTransaction(); session.endSession();
+          return res.json({
+            message: `Stripe retry cho đơn #${order._id}`,
+            paymentResponse: { clientSecret: pi.client_secret, status: pi.status },
+          });
+        } else if (pi.status === "succeeded") {
+          await session.abortTransaction(); session.endSession();
+          return res.status(400).json({ message: "Đơn đã thanh toán Stripe." });
+        }
+      }
+
+      if (!pi) {
+        pi = await stripe.paymentIntents.create({
+          amount,
+          currency: "vnd", // lowercase
+          automatic_payment_methods: { enabled: true },
+          metadata: { orderId: String(order._id), paymentId: String(payment._id) },
+        });
+        payment.paymentMethod = "Stripe";
+        payment.isPaid = false;
+        payment.stripePaymentIntentId = pi.id;
+        payment.stripeClientSecret = pi.client_secret;
+        payment.status = "pending";
+        await payment.save({ session });
+      }
+      paymentResponse = { clientSecret: pi.client_secret, status: pi.status };
+    }
+
+    await order.save({ session });
+    await session.commitTransaction(); session.endSession();
+
+    res.json({
+      message: `Đã khởi tạo retry bằng ${paymentMethod} cho đơn #${order._id}.`,
+      paymentResponse
+    });
+  } catch (err) {
+    await session.abortTransaction(); session.endSession();
+    res.status(500).json({ message: err.message });
+  }
+});
 
 module.exports = router;
 
