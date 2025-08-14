@@ -302,8 +302,8 @@ router.post("/checkout", async (req, res) => {
       orderStatus = "pending",
       name,
       sdt,
-      items,         // [{ variantID, quantity, price }]
-      voucherCode    // (nếu có)
+      items,         
+      voucherCode    
     } = req.body;
 
     if (!userID || !paymentInfo || !shippingAddress || !name || !sdt || !items?.length) {
@@ -339,6 +339,19 @@ router.post("/checkout", async (req, res) => {
 
     const finalTotal = Math.max(0, totalAmount - discountAmount);
 
+    // === MỚI: Check & giữ chỗ tồn kho (atomic) ngay sau voucher ===
+    for (const { variantID, quantity } of items) {
+      const updated = await ProductVariant.updateOne(
+        { _id: variantID, stock: { $gte: quantity } }, // chỉ match khi đủ tồn
+        { $inc: { stock: -quantity } },                // trừ tồn nếu match
+        { session }
+      );
+      if (updated.matchedCount === 0) {
+        throw new Error("Một hoặc nhiều sản phẩm không đủ tồn kho. Vui lòng cập nhật giỏ hàng.");
+      }
+    }
+    // === Hết phần thêm mới ===
+
     // Tạo Payment với số tiền phải thanh toán
     const [newPayment] = await Payment.create([{
       ...paymentInfo,
@@ -362,6 +375,7 @@ router.post("/checkout", async (req, res) => {
       voucher:        voucherId,
       orderDate:      new Date()
     }], { session });
+
     // 4. Tạo OrderDetail (nếu bạn vẫn muốn giữ collection riêng)
     const detailsPayload = items.map(i => ({
       orderID:    newOrder._id,
@@ -371,14 +385,14 @@ router.post("/checkout", async (req, res) => {
     }));
     const newDetails = await OrderDetail.insertMany(detailsPayload, { session });
 
-    // Giảm stock
-    for (const { variantID, quantity } of items) {
-      await ProductVariant.findByIdAndUpdate(
-        variantID,
-        { $inc: { stock: -quantity } },
-        { session }
-      );
-    }
+    // (ĐÃ BỎ) Giảm stock ở cuối vì đã trừ trong bước check & giữ chỗ tồn kho ở trên
+    // for (const { variantID, quantity } of items) {
+    //   await ProductVariant.findByIdAndUpdate(
+    //     variantID,
+    //     { $inc: { stock: -quantity } },
+    //     { session }
+    //   );
+    // }
 
     // Xóa khỏi Cart
     const variantIds = items.map(i => i.variantID);
@@ -394,6 +408,7 @@ router.post("/checkout", async (req, res) => {
     res.status(400).json({ message: err.message });
   }
 });
+
 
 // PUT /order/:id
 // → Cập nhật trạng thái đơn; nếu hủy thì hoàn tác tồn kho
