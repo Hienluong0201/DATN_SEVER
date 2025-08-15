@@ -337,7 +337,7 @@ router.post("/checkout", async (req, res) => {
       await voucher.save({ session });
     }
 
-    const finalTotal = Math.max(0, totalAmount - discountAmount);
+    const finalTotal = Math.max(0, totalAmount - discountAmount) + 30000;
 
     // === MỚI: Check & giữ chỗ tồn kho (atomic) ngay sau voucher ===
     for (const { variantID, quantity } of items) {
