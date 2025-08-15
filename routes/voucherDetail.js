@@ -78,7 +78,7 @@ router.post('/spin', async (req, res) => {
   if (!userId) return res.status(400).json({ message: 'Thiếu userId!' });
 
   // Xác suất trúng (vd: 30%)
-  const win = Math.random() < 0.3;
+  const win = Math.random() < 1;
 
   if (!win) {
     return res.json({ win: false, message: 'Bạn chưa trúng, thử lại nhé!' });
