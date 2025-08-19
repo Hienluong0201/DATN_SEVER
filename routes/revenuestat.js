@@ -436,6 +436,125 @@ router.get('/revenue/popular-products', async (req, res, next) => {
     next(err);
   }
 });
+// 7. Thống kê sản phẩm sắp hết hàng
+// GET /api/statistics/inventory/low-stock?threshold=&limit=&skip=
+router.get('/inventory/low-stock', async (req, res, next) => {
+  try {
+    const { threshold = 10, limit = 20, skip = 0 } = req.query;
 
+    // Ép kiểu & giới hạn an toàn
+    const stockThreshold = Math.max(parseInt(threshold, 10) || 10, 0);
+    const queryLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 1000);
+    const querySkip = Math.max(parseInt(skip, 10) || 0, 0);
+
+    const lowStockProducts = await ProductVariant.aggregate([
+      {
+        $match: {
+          stock: { $lte: stockThreshold },
+        },
+      },
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'productID',
+          foreignField: '_id',
+          as: 'product',
+        },
+      },
+      { $unwind: '$product' },
+      {
+        $project: {
+          _id: 0,
+          variantId: '$_id',
+          productId: '$product._id',
+          productName: '$product.name',
+          variantDescription: {
+            $concat: [
+              { $ifNull: ['$size', ''] },
+              { $cond: { if: { $and: ['$size', '$color'] }, then: ' - ', else: '' } },
+              { $ifNull: ['$color', ''] },
+            ],
+          },
+          stock: 1,
+          categoryID: '$product.categoryID',
+        },
+      },
+      { $sort: { stock: 1 } },
+      { $skip: querySkip },
+      { $limit: queryLimit },
+    ]).allowDiskUse(true);
+
+    res.json({ data: lowStockProducts });
+  } catch (err) {
+    console.error('Low stock products error:', err);
+    next(err);
+  }
+});
+
+// 8. Thống kê sản phẩm ít người mua nhất
+// GET /api/statistics/revenue/least-purchased?startDate=&endDate=&limit=&skip=
+router.get('/inventory/status', async (req, res, next) => {
+  try {
+    const { limit = 20, skip = 0 } = req.query;
+
+    const queryLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 1000);
+    const querySkip = Math.max(parseInt(skip, 10) || 0, 0);
+
+    const inventoryStatus = await ProductVariant.aggregate([
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'productID',
+          foreignField: '_id',
+          as: 'product',
+        },
+      },
+      { $unwind: '$product' },
+      {
+        $addFields: {
+          stockStatus: {
+            $cond: {
+              if: { $lte: ['$stock', 5] },
+              then: 'critical',
+              else: {
+                $cond: {
+                  if: { $lte: ['$stock', 20] },
+                  then: 'low',
+                  else: 'normal',
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          variantId: '$_id',
+          productId: '$product._id',
+          productName: '$product.name',
+          variantDescription: {
+            $concat: [
+              { $ifNull: ['$size', ''] },
+              { $cond: { if: { $and: ['$size', '$color'] }, then: ' - ', else: '' } },
+              { $ifNull: ['$color', ''] },
+            ],
+          },
+          stock: 1,
+          stockStatus: 1,
+          categoryID: '$product.categoryID',
+        },
+      },
+      { $sort: { stock: 1 } },
+      { $skip: querySkip },
+      { $limit: queryLimit },
+    ]).allowDiskUse(true);
+
+    res.json({ data: inventoryStatus });
+  } catch (err) {
+    console.error('Inventory status error:', err);
+    next(err);
+  }
+});
 
 module.exports = router;
