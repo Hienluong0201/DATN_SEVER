@@ -8,14 +8,14 @@ const ImageSchema = new Schema({
     required: true 
   },
   imageURL: { 
-    type: [String], // Mảng các đường dẫn ảnh
-    default: [],    // Mặc định là mảng rỗng
-    required: false // Không bắt buộc
+    type: [String], 
+    default: [],
+    required: false 
   },
   videoURL: {
-    type: [String], // Mảng các đường dẫn video
-    default: [],    // Mặc định là mảng rỗng
-    required: false // Không bắt buộc
+    type: [String], 
+    default: [],
+    required: false 
   }
 }, { timestamps: true });
 
