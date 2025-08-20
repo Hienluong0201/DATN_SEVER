@@ -7,34 +7,39 @@ const { uploadImage } = require('../middlewares/upload');
 // 1. Tạo mới một Review
 // POST /reviews 
 // POST /reviews
+// POST /reviews
 router.post('/', uploadImage.array('images'), async (req, res) => {
-   console.log('🔥 ĐÃ VÀO ROUTE /review');
+  console.log('🔥 ĐÃ VÀO ROUTE /review');
   try {
     const { userID, productID, rating, comment, status } = req.body;
-    console.log('📸 Received files:', req.files);
+
     if (!userID || !productID || rating == null) {
       return res.status(400).json({ message: 'Thiếu userID, productID hoặc rating.' });
     }
+    if (!mongoose.Types.ObjectId.isValid(userID) || !mongoose.Types.ObjectId.isValid(productID)) {
+      return res.status(400).json({ message: 'userID hoặc productID không hợp lệ.' });
+    }
 
-    // Lấy link ảnh từ req.files (Cloudinary trả về .path là URL)
+    // Chặn tạo trùng ở tầng app (bổ sung cho unique index)
+    const existed = await Review.findOne({ userID, productID });
+    if (existed) {
+      return res.status(409).json({ message: 'Bạn đã đánh giá sản phẩm này rồi.' });
+    }
+
     const imageUrls = req.files?.map(file => file.path) || [];
-
-    const review = new Review({
-      userID,
-      productID,
-      rating,
-      comment,
-      status,
-      images: imageUrls, // lưu link ảnh vào mảng images
-    });
+    const review = new Review({ userID, productID, rating, comment, status, images: imageUrls });
 
     const saved = await review.save();
     await saved.populate(['userID', 'productID']);
-    res.status(201).json(saved);
+    return res.status(201).json(saved);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    if (err?.code === 11000) {
+      return res.status(409).json({ message: 'Bạn chỉ được tạo 1 review cho mỗi sản phẩm.' });
+    }
+    return res.status(500).json({ message: err.message });
   }
 });
+
 
 
 // 2. Lấy danh sách tất cả Reviews
@@ -84,26 +89,56 @@ router.get('/product/:productID', async (req, res) => {
 
 // 4. Cập nhật một Review
 // PUT /review/:id
-router.put('/:id', async (req, res) => {
+// PUT /reviews/:id
+router.put('/:id', uploadImage.array('images'), async (req, res) => {
   try {
-    const { rating, comment, status } = req.body;
-    const review = await Review.findById(req.params.id);
-    if (!review) {
-      return res.status(404).json({ message: 'Không tìm thấy review.' });
+    const { id } = req.params;
+    const { userID, rating, comment, status } = req.body; // nên lấy từ auth: req.user._id
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'review id không hợp lệ.' });
     }
 
-    if (rating != null)   review.rating = rating;
-    if (comment !== undefined) review.comment = comment;
-    if (status !== undefined)  review.status = status;
+    // (Tuỳ chọn) Kiểm tra quyền sở hữu trước — nếu bạn có auth, so sánh với req.user._id
+    const current = await Review.findById(id).select('userID editCount');
+    if (!current) return res.status(404).json({ message: 'Không tìm thấy review.' });
+    if (!userID || current.userID.toString() !== userID) {
+      return res.status(403).json({ message: 'Bạn không có quyền sửa review này.' });
+    }
 
-    const updated = await review.save();
+    // Chuẩn bị field được phép sửa
+    const setFields = {};
+    if (rating != null) setFields.rating = rating;
+    if (comment !== undefined) setFields.comment = comment;
+    if (status !== undefined) setFields.status = status;
 
-    // Chỉ gọi populate một lần, truyền array các field cần populate
-    await updated.populate(['userID', 'productID']);
+    if (req.files?.length) {
+      setFields.images = req.files.map(f => f.path);
+    }
 
-    res.json(updated);
+    // Atomic update: chỉ update khi còn lượt (editCount < 1)
+    const updated = await Review.findOneAndUpdate(
+      { _id: id, userID, editCount: { $lt: 1 } },
+      {
+        $set: setFields,
+        $inc: { editCount: 1 },
+        $currentDate: { lastEditedAt: true }
+      },
+      { new: true }
+    ).populate(['userID', 'productID']);
+
+    if (!updated) {
+      const latest = await Review.findById(id).select('editCount userID');
+      if (!latest) return res.status(404).json({ message: 'Không tìm thấy review.' });
+      if (latest.editCount >= 1) {
+        return res.status(403).json({ message: 'Bạn đã hết lượt sửa review (chỉ được sửa 1 lần).' });
+      }
+      return res.status(403).json({ message: 'Bạn không có quyền sửa review này.' });
+    }
+
+    return res.json(updated);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message });
   }
 });
 
