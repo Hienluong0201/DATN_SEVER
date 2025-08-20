@@ -412,6 +412,8 @@ router.post("/checkout", async (req, res) => {
 
 // PUT /order/:id
 // → Cập nhật trạng thái đơn; nếu hủy thì hoàn tác tồn kho
+// PUT /order/:id
+// → Cập nhật trạng thái đơn; nếu hủy thì hoàn tác tồn kho và lưu lý do hủy
 router.put("/:id", async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -427,21 +429,29 @@ router.put("/:id", async (req, res) => {
     }
 
     const oldStatus = order.orderStatus;
-    const newStatus = req.body.orderStatus;
+    const { orderStatus, cancellationReason } = req.body;
 
     // Kiểm tra trạng thái hợp lệ
     const validStatuses = ["pending", "paid", "shipped", "delivered", "cancelled"];
-    if (newStatus && !validStatuses.includes(newStatus)) {
+    if (orderStatus && !validStatuses.includes(orderStatus)) {
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({ message: "Trạng thái không hợp lệ." });
     }
 
-    if (newStatus && newStatus !== oldStatus) {
-      order.orderStatus = newStatus;
+    // Kiểm tra lý do hủy nếu trạng thái mới là cancelled
+    if (orderStatus === "cancelled" && (!cancellationReason || typeof cancellationReason !== "string" || cancellationReason.trim() === "")) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ message: "Vui lòng cung cấp lý do hủy." });
+    }
 
-      // Nếu chuyển sang hủy, hoàn kho
-      if (newStatus === "cancelled" && oldStatus !== "cancelled") {
+    if (orderStatus && orderStatus !== oldStatus) {
+      order.orderStatus = orderStatus;
+
+      // Nếu chuyển sang hủy, hoàn kho và lưu lý do
+      if (orderStatus === "cancelled" && oldStatus !== "cancelled") {
+        order.cancellationReason = cancellationReason.trim();
         for (const item of order.items) {
           await ProductVariant.findByIdAndUpdate(
             item.variantID,
@@ -454,25 +464,73 @@ router.put("/:id", async (req, res) => {
       // Lưu đơn hàng
       await order.save({ session });
 
-      // Gửi email cho khách hàng
+      // Ánh xạ trạng thái sang tiếng Việt
       const statusMessages = {
-        pending: "Đơn hàng của bạn đang được xử lý.",
-        processing: "Đơn hàng của bạn đang được chuẩn bị.",
-        shipped: "Đơn hàng của bạn đã được gửi đi.",
-        completed: "Đơn hàng của bạn đã hoàn thành.",
-        cancelled: "Đơn hàng của bạn đã bị hủy."
+        pending: "Đơn hàng của bạn đang chờ xử lý. Chúng tôi sẽ sớm liên hệ để xác nhận.",
+        paid: "Đơn hàng của bạn đã được thanh toán. Chúng tôi đang chuẩn bị hàng.",
+        shipped: "Đơn hàng của bạn đã được giao cho đơn vị vận chuyển. Vui lòng theo dõi trạng thái giao hàng.",
+        delivered: "Đơn hàng của bạn đã được giao thành công. Cảm ơn bạn đã mua sắm!",
+        cancelled: `Đơn hàng của bạn đã bị hủy. <strong>Lý do: ${order.cancellationReason}</strong>`
       };
 
+      const vietnameseStatus = {
+        pending: "Đang chờ xử lý",
+        paid: "Đã thanh toán",
+        shipped: "Đã giao hàng",
+        delivered: "Hoàn thành",
+        cancelled: "Đã hủy"
+      };
+
+      // Thiết kế HTML email đẹp mắt
+      const emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+            .container { max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .header { background: #007bff; padding: 20px; text-align: center; border-top-left-radius: 8px; border-top-right-radius: 8px; }
+            .header img { max-width: 150px; height: auto; }
+            .content { padding: 20px; }
+            .content h2 { color: #333; }
+            .status { font-size: 18px; font-weight: bold; color: ${orderStatus === "cancelled" ? "#dc3545" : "#28a745"}; }
+            .reason { background: #f8d7da; padding: 10px; border-radius: 4px; color: #721c24; margin-top: 10px; }
+            .footer { text-align: center; padding: 20px; font-size: 14px; color: #666; border-top: 1px solid #eee; }
+            .footer a { color: #007bff; text-decoration: none; }
+            .button { display: inline-block; padding: 10px 20px; margin-top: 20px; background: #007bff; color: #fff; text-decoration: none; border-radius: 4px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <img src="https://your-logo-url.com/logo.png" alt="Company Logo" />
+            </div>
+            <div class="content">
+              <h2>Kính gửi ${order.name},</h2>
+              <p>Cảm ơn bạn đã mua sắm tại cửa hàng của chúng tôi!</p>
+              <p>Đơn hàng <strong>#${order._id}</strong> của bạn đã được cập nhật sang trạng thái: <span class="status">${vietnameseStatus[orderStatus]}</span>.</p>
+              <p>${statusMessages[orderStatus]}</p>
+              ${orderStatus === "cancelled" ? `<div class="reason">Lý do hủy: ${order.cancellationReason}</div>` : ""}
+              <p>Để xem chi tiết đơn hàng, vui lòng <a href="https://your-website.com/order/${order._id}" class="button">Xem đơn hàng</a>.</p>
+            </div>
+            <div class="footer">
+              <p>Cảm ơn bạn đã tin tưởng chúng tôi!</p>
+              <p>Truy cập <a >Lai app để nt để được giải thích </a> để khám phá thêm sản phẩm.</p>
+              <p>Liên hệ hỗ trợ: <a >nguyenhienluong200212@gmail.com</a></p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      // Gửi email
       await sendEmail({
         to: order.userID.email,
         subject: `Cập nhật trạng thái đơn hàng #${order._id}`,
-        text: `Kính gửi ${order.name},\n\nĐơn hàng #${order._id} của bạn đã được cập nhật sang trạng thái: **${newStatus}**.\n${statusMessages[newStatus]}\n\nCảm ơn bạn đã mua sắm với chúng tôi!`,
-        html: `
-          <h2>Kính gửi ${order.name},</h2>
-          <p>Đơn hàng <b>#${order._id}</b> của bạn đã được cập nhật sang trạng thái: <b>${newStatus}</b>.</p>
-          <p>${statusMessages[newStatus]}</p>
-          <p>Cảm ơn bạn đã mua sắm với chúng tôi!</p>
-        `
+        text: `Kính gửi ${order.name},\n\nĐơn hàng #${order._id} của bạn đã được cập nhật sang trạng thái: ${vietnameseStatus[orderStatus]}.\n${statusMessages[orderStatus]}\n\nCảm ơn bạn đã mua sắm với chúng tôi!`,
+        html: emailHtml
       });
     } else {
       // Nếu không thay đổi trạng thái, chỉ lưu đơn hàng
