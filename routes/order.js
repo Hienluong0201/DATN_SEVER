@@ -10,28 +10,47 @@ const Voucher        = require("../models/Voucher");
 const OrderDetail    = require("../models/OrderDetail");
 const crypto = require("crypto");
 const axios = require("axios");
+const qs = require("qs");
+const moment = require("moment");
 require('dotenv').config(); 
 const Stripe = require("stripe");
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const cron = require('node-cron');
 
-// Chạy mỗi 15 phút
-cron.schedule('*/15 * * * *', async () => { // chạy mỗi 15 phút
-  console.log('[CRON] Đang kiểm tra và huỷ các đơn pending quá 15 phút...');
+// === VNPAY CONFIG ===
+const vnp_TmnCode    = process.env.VNP_TMNCODE    || "GH0YA7ZW";
+const vnp_HashSecret = process.env.VNP_HASHSECRET || "5YN1GMQMI6WTPMBTT5883CIVTF2K58XR";
+const vnp_Url        = process.env.VNP_URL        || "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
+const vnp_ReturnUrl  = process.env.VNP_RETURNURL  || "http://localhost:3000/order/vnpay_return";
 
+function sortObject(obj) {
+  let sorted = {};
+  let str = [];
+  let key;
+  for (key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      str.push(encodeURIComponent(key));
+    }
+  }
+  str.sort();
+  for (key = 0; key < str.length; key++) {
+    sorted[str[key]] = encodeURIComponent(obj[str[key]]).replace(/%20/g, "+");
+  }
+  return sorted;
+}
+
+// Chạy mỗi 15 phút
+cron.schedule('*/15 * * * *', async () => {
+  console.log('[CRON] Đang kiểm tra và huỷ các đơn pending quá 15 phút...');
   const now = Date.now();
   const FIFTEEN_MIN = 15 * 60 * 1000;
 
-  // 1. Lấy tất cả đơn pending
   let orders = await Order.find({ orderStatus: "pending" }).populate("paymentID");
-
-  // 2. Lọc lại đơn có paymentMethod là ZaloPay HOẶC Stripe
-  const includedMethods = ["ZaloPay", "Stripe"];
+  const includedMethods = ["ZaloPay", "Stripe", "VNPAY"];
   orders = orders.filter(order =>
     order.paymentID && includedMethods.includes(order.paymentID.paymentMethod)
   );
 
-  // 3. Lọc đơn quá 15 phút
   const ordersToCancel = orders.filter(order =>
     now - new Date(order.createdAt).getTime() >= FIFTEEN_MIN
   );
@@ -40,9 +59,7 @@ cron.schedule('*/15 * * * *', async () => { // chạy mỗi 15 phút
     console.log("[CRON] Chuẩn bị huỷ đơn:", order._id);
     order.orderStatus = "cancelled";
     await order.save();
-    console.log("[CRON] Đã huỷ xong đơn:", order._id);
 
-    // Hoàn kho nếu có items
     if (order.items && order.items.length > 0) {
       for (const item of order.items) {
         await ProductVariant.findByIdAndUpdate(
@@ -51,13 +68,12 @@ cron.schedule('*/15 * * * *', async () => { // chạy mỗi 15 phút
         );
       }
     }
-
     console.log(`[CRON] Đã huỷ đơn hàng #${order._id} do pending quá 15 phút!`);
   }
 });
 
 
-//thanh toán và stripe
+// === STRIPE ===
 router.post("/stripe-payment-intent", async (req, res) => {
   try {
     const { amount = 5000 } = req.body;
@@ -81,18 +97,17 @@ const generateAppTransId = () => {
     return `${yy}${mm}${dd}_${rand}`;
 }
 
-// --- ZALO PAY CONFIG (NÊN để .env) ---
+// === ZALOPAY CONFIG ===
 const zaloPayConfig = {
-    app_id: 2553,             // AppID test của bạn (nên để .env)
-    key1: "PcY4iZIKFCIdgZvA6ueMcMHHUbRLYjPL",    // Key1 test của bạn
+    app_id: 2553,
+    key1: "PcY4iZIKFCIdgZvA6ueMcMHHUbRLYjPL",
     endpoint: "https://sb-openapi.zalopay.vn/v2/create",
 };
-// Thanh toán ZaloPay
+
+// === ZALOPAY: Tạo thanh toán ===
 router.post("/zalopay", async (req, res) => {
   try {
     const { amount } = req.body;
-
-    // Kiểm tra amount hợp lệ
     if (!amount || typeof amount !== 'number' || amount <= 0) {
       return res.status(400).json({ error: "Số tiền không hợp lệ." });
     }
@@ -102,15 +117,14 @@ router.post("/zalopay", async (req, res) => {
       app_trans_id: generateAppTransId(),
       app_user: "user_test",
       app_time: Date.now(),
-      amount: Math.floor(amount), // Sử dụng amount từ req.body
+      amount: Math.floor(amount), 
       item: JSON.stringify([]),
-      embed_data: JSON.stringify({}), // Không cần orderId
+      embed_data: JSON.stringify({}), 
       description: `Thanh toán qua ZaloPay ${amount} VND`,
       bank_code: "",
       callback_url: zaloPayConfig.callback_url,
     };
 
-    // Tạo MAC để bảo mật
     const data =
       order.app_id + "|" +
       order.app_trans_id + "|" +
@@ -121,23 +135,83 @@ router.post("/zalopay", async (req, res) => {
       order.item;
     order.mac = crypto.createHmac("sha256", zaloPayConfig.key1).update(data).digest("hex");
 
-    console.log('ZaloPay Order:', order);
-
-    // Gửi request tới ZaloPay
     const response = await axios.post(zaloPayConfig.endpoint, order);
-
-    // Trả về cho client: tất cả data ZaloPay trả về, và thêm app_trans_id
-    res.json({
-      ...response.data,
-      app_trans_id: order.app_trans_id
-    });
-
+    res.json({ ...response.data, app_trans_id: order.app_trans_id });
   } catch (e) {
-    console.error('ZaloPay Error:', e.response ? e.response.data : e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
+
+// === VNPAY: Tạo URL thanh toán ===
+router.post("/vnpay_create", (req, res) => {
+  process.env.TZ = "Asia/Ho_Chi_Minh";
+
+  let date = new Date();
+  let createDate = moment(date).format("YYYYMMDDHHmmss");
+
+  let ipAddr =
+    req.headers["x-forwarded-for"] ||
+    req.connection.remoteAddress ||
+    req.socket.remoteAddress;
+
+  let orderId = moment(date).format("DDHHmmss");
+  let amount = req.body.amount || 10000; // mặc định 10k
+  let bankCode = req.body.bankCode;
+
+  let locale = req.body.language || "vn";
+  let currCode = "VND";
+
+  let vnp_Params = {};
+  vnp_Params["vnp_Version"] = "2.1.0";
+  vnp_Params["vnp_Command"] = "pay";
+  vnp_Params["vnp_TmnCode"] = vnp_TmnCode;
+  vnp_Params["vnp_Locale"] = locale;
+  vnp_Params["vnp_CurrCode"] = currCode;
+  vnp_Params["vnp_TxnRef"] = orderId;
+  vnp_Params["vnp_OrderInfo"] = "Thanh toan don hang: " + orderId;
+  vnp_Params["vnp_OrderType"] = "other";
+  vnp_Params["vnp_Amount"] = amount * 100;
+  vnp_Params["vnp_ReturnUrl"] = vnp_ReturnUrl;
+  vnp_Params["vnp_IpAddr"] = ipAddr;
+  vnp_Params["vnp_CreateDate"] = createDate;
+
+  if (bankCode) {
+    vnp_Params["vnp_BankCode"] = bankCode;
+  }
+
+  vnp_Params = sortObject(vnp_Params);
+
+  let signData = qs.stringify(vnp_Params, { encode: false });
+  let hmac = crypto.createHmac("sha512", vnp_HashSecret);
+  let signed = hmac.update(Buffer.from(signData, "utf-8")).digest("hex");
+  vnp_Params["vnp_SecureHash"] = signed;
+
+  let paymentUrl = vnp_Url + "?" + qs.stringify(vnp_Params, { encode: false });
+
+  res.json({ paymentUrl });
+});
+
+// === VNPAY RETURN (Frontend gọi về) ===
+router.get("/vnpay_return", (req, res) => {
+  let vnp_Params = req.query;
+  let secureHash = vnp_Params["vnp_SecureHash"];
+
+  delete vnp_Params["vnp_SecureHash"];
+  delete vnp_Params["vnp_SecureHashType"];
+
+  vnp_Params = sortObject(vnp_Params);
+
+  let signData = qs.stringify(vnp_Params, { encode: false });
+  let hmac = crypto.createHmac("sha512", vnp_HashSecret);
+  let signed = hmac.update(Buffer.from(signData, "utf-8")).digest("hex");
+
+  if (secureHash === signed) {
+    return res.json({ code: vnp_Params["vnp_ResponseCode"], message: "OK" });
+  } else {
+    return res.json({ code: "97", message: "Sai chữ ký" });
+  }
+}); 
 
 // GET /order
 // → Lấy tất cả đơn, sort mới nhất, populate user, payment, voucher, và variant->product
@@ -710,5 +784,6 @@ router.post("/:id/retry-payment", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
 
 module.exports = router;
