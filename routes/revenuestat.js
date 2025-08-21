@@ -436,6 +436,7 @@ router.get('/revenue/popular-products', async (req, res, next) => {
     next(err);
   }
 });
+
 // 7. Thống kê sản phẩm sắp hết hàng
 // GET /api/statistics/inventory/low-stock?threshold=&limit=&skip=
 router.get('/inventory/low-stock', async (req, res, next) => {
@@ -553,6 +554,72 @@ router.get('/inventory/status', async (req, res, next) => {
     res.json({ data: inventoryStatus });
   } catch (err) {
     console.error('Inventory status error:', err);
+    next(err);
+  }
+});
+// GET /api/statistics/revenue/least-popular-products?startDate=&endDate=&limit=
+router.get('/revenue/least-popular-products', async (req, res, next) => {
+  try {
+    const { startDate, endDate } = req.query;
+    let   { limit = 100 } = req.query;
+
+    // Ép kiểu & giới hạn an toàn
+    limit = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 1000);
+
+    // Chuẩn hóa mốc thời gian
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30*24*60*60*1000);
+    const end   = endDate   ? new Date(endDate)   : new Date();
+    start.setHours(0,0,0,0);
+    end.setHours(23,59,59,999);
+
+    const stats = await Order.aggregate([
+      {
+        $match: {
+          orderDate: { $gte: start, $lte: end },
+          orderStatus: 'delivered' // ✅ chỉ tính đơn đã giao
+        }
+      },
+      { $unwind: '$items' },
+      {
+        $lookup: {
+          from: 'productvariants',
+          localField: 'items.variantID',
+          foreignField: '_id',
+          as: 'variant'
+        }
+      },
+      { $unwind: '$variant' },
+      {
+        $group: {
+          _id: '$variant.productID',
+          soldQuantity: { $sum: '$items.quantity' }
+        }
+      },
+      { $sort: { soldQuantity: 1 } },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: 'products',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'product'
+        }
+      },
+      { $unwind: '$product' },
+      {
+        $project: {
+          _id: 0,
+          productId: '$_id',
+          name: '$product.name',
+          // Theo các route trước, trường là categoryID (không phải category)
+          categoryID: '$product.categoryID',
+          soldQuantity: 1
+        }
+      }
+    ]).allowDiskUse(true);
+
+    res.json({ data: stats });
+  } catch (err) {
     next(err);
   }
 });
