@@ -375,8 +375,8 @@ router.get("/user/:userId", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
-// GET /order/unpaid-zalopay
-// -> Lấy tất cả đơn hàng ZaloPay chưa thanh toán (pending)
+// GET /order/unpaid-gateway-orders
+// -> Lấy tất cả đơn hàng cổng thanh toán (ZaloPay, Stripe, VNPAY) chưa thanh toán (pending)
 router.get("/unpaid-gateway-orders", async (req, res) => {
   try {
     let { minutes = 0 } = req.query; // minutes = 0 nghĩa là không lọc theo thời gian
@@ -387,11 +387,11 @@ router.get("/unpaid-gateway-orders", async (req, res) => {
       orderStatus: 'pending'
     }).populate('paymentID');
 
-    // Chỉ lấy các đơn có phương thức ZaloPay hoặc Stripe
-    const includedMethods = ["ZaloPay", "Stripe"];
+    // Chỉ lấy các đơn có phương thức ZaloPay, Stripe, VNPAY
+    const includedMethods = ["ZALOPAY", "STRIPE", "VNPAY"];
     orders = orders.filter(order =>
       order.paymentID &&
-      includedMethods.includes(order.paymentID.paymentMethod)
+      includedMethods.includes(order.paymentID.paymentMethod.toUpperCase())
     );
 
     // Nếu truyền minutes, lọc tiếp đơn đã tạo quá X phút
@@ -408,6 +408,7 @@ router.get("/unpaid-gateway-orders", async (req, res) => {
   }
 });
 
+
 // GET /order/:id
 // → Lấy chi tiết order (header) và cả items luôn
 router.get("/:id", async (req, res) => {
@@ -420,6 +421,73 @@ router.get("/:id", async (req, res) => {
     if (!order) return res.status(404).json({ message: "Không tìm thấy đơn." });
 
     res.json(order);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+
+//thanh toán lại
+// POST /order/:id/retry-vnpay
+router.post("/:id/retry-vnpay", async (req, res) => {
+  try {
+    const { bankCode } = req.body;
+
+    const order = await Order.findById(req.params.id).populate("paymentID");
+    if (!order) return res.status(404).json({ message: "Không tìm thấy đơn hàng." });
+
+    if (order.orderStatus !== "pending") {
+      return res.status(400).json({ message: "Đơn hàng không còn ở trạng thái pending." });
+    }
+
+    if (!order.paymentID || order.paymentID.isPaid) {
+      return res.status(400).json({ message: "Đơn hàng đã thanh toán hoặc chưa có payment." });
+    }
+
+    // === Tạo lại link thanh toán VNPAY ===
+    process.env.TZ = "Asia/Ho_Chi_Minh";
+    let date = new Date();
+    let createDate = moment(date).format("YYYYMMDDHHmmss");
+
+    let ipAddr =
+      req.headers["x-forwarded-for"] ||
+      req.connection.remoteAddress ||
+      req.socket.remoteAddress;
+
+    let vnp_Params = {};
+    vnp_Params["vnp_Version"] = "2.1.0";
+    vnp_Params["vnp_Command"] = "pay";
+    vnp_Params["vnp_TmnCode"] = vnp_TmnCode;
+    vnp_Params["vnp_Locale"] = "vn";
+    vnp_Params["vnp_CurrCode"] = "VND";
+    vnp_Params["vnp_TxnRef"] = String(order._id);   // dùng _id của order
+    vnp_Params["vnp_OrderInfo"] = "Thanh toan don hang: " + order._id;
+    vnp_Params["vnp_OrderType"] = "other";
+    vnp_Params["vnp_Amount"] = order.finalTotal * 100;
+    vnp_Params["vnp_ReturnUrl"] = vnp_ReturnUrl;
+    vnp_Params["vnp_IpAddr"] = ipAddr;
+    vnp_Params["vnp_CreateDate"] = createDate;
+
+    if (bankCode) {
+      vnp_Params["vnp_BankCode"] = bankCode;
+    }
+
+    vnp_Params = sortObject(vnp_Params);
+
+    let signData = qs.stringify(vnp_Params, { encode: false });
+    let hmac = crypto.createHmac("sha512", vnp_HashSecret);
+    let signed = hmac.update(Buffer.from(signData, "utf-8")).digest("hex");
+    vnp_Params["vnp_SecureHash"] = signed;
+
+    let paymentUrl = vnp_Url + "?" + qs.stringify(vnp_Params, { encode: false });
+
+    // Cập nhật trạng thái payment về pending (retry)
+    order.paymentID.paymentMethod = "VNPAY";
+    order.paymentID.status = "pending";
+    order.paymentID.isPaid = false;
+    await order.paymentID.save();
+
+    res.json({ message: "Khởi tạo lại thanh toán VNPAY thành công.", paymentUrl });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
