@@ -196,6 +196,36 @@ router.get('/product/:productID/average-rating', async (req, res) => {
   }
 });
 
+// Ẩn/hiện một review (chỉ cập nhật status)
+// PATCH /reviews/:id/status
+router.patch('/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'review id không hợp lệ.' });
+    }
+
+    if (typeof status !== 'boolean') {
+      return res.status(400).json({ message: 'status phải là true hoặc false.' });
+    }
+
+    const updated = await Review.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    ).populate(['userID', 'productID']);
+
+    if (!updated) {
+      return res.status(404).json({ message: 'Không tìm thấy review.' });
+    }
+
+    return res.json(updated);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
 
 
 module.exports = router;
