@@ -4,8 +4,13 @@ var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var mongoose = require('mongoose');
+const hbs = require("hbs");
+
 require('dotenv').config();
 
+hbs.registerHelper("eq", function (a, b) {
+  return a === b;
+});
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
 var productsRouter = require('./routes/product');
