@@ -206,12 +206,59 @@ router.get("/vnpay_return", (req, res) => {
   let hmac = crypto.createHmac("sha512", vnp_HashSecret);
   let signed = hmac.update(Buffer.from(signData, "utf-8")).digest("hex");
 
+  let result;
+
   if (secureHash === signed) {
-    return res.json({ code: vnp_Params["vnp_ResponseCode"], message: "OK" });
+    result = {
+      status: "success",
+      code: vnp_Params["vnp_ResponseCode"],
+      message: "Thanh toán thành công",
+      orderId: vnp_Params["vnp_TxnRef"],
+      amount: vnp_Params["vnp_Amount"] / 100
+    };
   } else {
-    return res.json({ code: "97", message: "Sai chữ ký" });
+    result = {
+      status: "error",
+      code: "97",
+      message: "Sai chữ ký"
+    };
   }
-}); 
+
+  // Render HTML có postMessage trả về RN WebView
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+      <meta charset="UTF-8" />
+      <title>Kết quả thanh toán</title>
+      <style>
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .card { text-align: center; padding: 20px; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .success { color: #27ae60; }
+        .error { color: #c0392b; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <h2 class="${result.status}">${result.status === "success" ? "✅ Thanh toán thành công" : "❌ Thanh toán thất bại"}</h2>
+        <p>${result.message}</p>
+        <p>Mã đơn hàng: ${result.orderId || "-"}</p>
+        <p>Số tiền: ${result.amount || 0} VND</p>
+      </div>
+      <script>
+        setTimeout(() => {
+          const data = ${JSON.stringify(result)};
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify(data));
+          }
+        }, 500);
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+
 
 // GET /order
 // → Lấy tất cả đơn, sort mới nhất, populate user, payment, voucher, và variant->product

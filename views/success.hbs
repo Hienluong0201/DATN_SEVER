@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Kết quả thanh toán</title>
+  <style>
+    body {
+      font-family: "Inter", "Poppins", sans-serif;
+      background: linear-gradient(120deg, #f0f4ff, #e0f7fa);
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+      padding: 40px 50px;
+      max-width: 450px;
+      width: 100%;
+      text-align: center;
+      animation: fadeInUp 0.8s ease;
+    }
+
+    @keyframes fadeInUp {
+      from {opacity: 0; transform: translateY(20px);}
+      to {opacity: 1; transform: translateY(0);}
+    }
+
+    .status-icon {
+      width: 90px; height: 90px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 42px;
+      margin: 0 auto 20px;
+      color: white;
+    }
+
+    .success-icon {
+      background: #16a34a;
+      box-shadow: 0 6px 15px rgba(22, 163, 74, 0.4);
+    }
+
+    .error-icon {
+      background: #dc2626;
+      box-shadow: 0 6px 15px rgba(220, 38, 38, 0.4);
+    }
+
+    h1 {
+      margin: 10px 0 25px;
+      font-size: 26px;
+      font-weight: 700;
+      color: #111827;
+    }
+
+    .details {
+      text-align: left;
+      margin-top: 20px;
+    }
+
+    .details p {
+      margin: 10px 0;
+      font-size: 15px;
+      color: #374151;
+    }
+
+    .details span {
+      font-weight: 600;
+      color: #111827;
+    }
+
+    .btn {
+      display: inline-block;
+      margin-top: 30px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      text-decoration: none;
+      background: linear-gradient(90deg, #2563eb, #3b82f6);
+      color: white;
+      font-weight: 600;
+      font-size: 15px;
+      transition: transform 0.2s, box-shadow 0.3s;
+      box-shadow: 0 6px 15px rgba(37, 99, 235, 0.4);
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(37, 99, 235, 0.6);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    {{#if (eq status "success")}}
+      <div class="status-icon success-icon">✓</div>
+      <h1>Thanh toán thành công</h1>
+    {{else}}
+      <div class="status-icon error-icon">✕</div>
+      <h1>Thanh toán thất bại</h1>
+    {{/if}}
+
+    <div class="details">
+      <p><span>Mã đơn hàng:</span> {{orderId}}</p>
+      <p><span>Số tiền:</span> {{amount}} VND</p>
+      <p><span>Mã phản hồi:</span> {{code}}</p>
+      <p><span>Thông báo:</span> {{message}}</p>
+    </div>
+
+    <a href="/" class="btn">Quay lại trang chủ</a>
+  </div>
+</body>
+</html>
