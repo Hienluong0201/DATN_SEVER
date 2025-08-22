@@ -155,7 +155,7 @@ router.post("/vnpay_create", (req, res) => {
     req.connection.remoteAddress ||
     req.socket.remoteAddress;
 
-  let orderId = moment(date).format("DDHHmmss");
+  let orderId = req.body.orderId;
   let amount = req.body.amount || 10000; // mặc định 10k
   let bankCode = req.body.bankCode;
 
@@ -193,7 +193,8 @@ router.post("/vnpay_create", (req, res) => {
 });
 
 // === VNPAY RETURN (Frontend gọi về) ===
-router.get("/vnpay_return", (req, res) => {
+// === VNPAY RETURN (Frontend gọi về) ===
+router.get("/vnpay_return", async (req, res) => {
   let vnp_Params = req.query;
   let secureHash = vnp_Params["vnp_SecureHash"];
 
@@ -208,23 +209,44 @@ router.get("/vnpay_return", (req, res) => {
 
   let result;
 
-  if (secureHash === signed) {
+  if (secureHash === signed && vnp_Params["vnp_ResponseCode"] === "00") {
+    // ✅ Thanh toán hợp lệ
+    const orderId = vnp_Params["vnp_TxnRef"];
+    const amount = vnp_Params["vnp_Amount"] / 100;
+
+    // Cập nhật DB
+    try {
+      const order = await Order.findById(orderId).populate("paymentID");
+      if (order) {
+        order.orderStatus = "paid";
+        await order.save();
+
+        if (order.paymentID) {
+          order.paymentID.status = "paid";
+          order.paymentID.isPaid = true;
+          await order.paymentID.save();
+        }
+      }
+    } catch (err) {
+      console.error("Lỗi update order:", err.message);
+    }
+
     result = {
       status: "success",
       code: vnp_Params["vnp_ResponseCode"],
       message: "Thanh toán thành công",
-      orderId: vnp_Params["vnp_TxnRef"],
-      amount: vnp_Params["vnp_Amount"] / 100
+      orderId,
+      amount
     };
   } else {
     result = {
       status: "error",
       code: "97",
-      message: "Sai chữ ký"
+      message: "Sai chữ ký hoặc thanh toán thất bại"
     };
   }
 
-  // Render HTML có postMessage trả về RN WebView
+  // Render HTML trả về RN WebView
   res.send(`
     <!DOCTYPE html>
     <html lang="vi">
@@ -828,6 +850,30 @@ router.post("/:id/retry-payment", async (req, res) => {
     });
   } catch (err) {
     await session.abortTransaction(); session.endSession();
+    res.status(500).json({ message: err.message });
+  }
+});
+// GET /order/:id/status
+// → Chỉ trả về trạng thái order + payment
+router.get("/:id/status", async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id).populate("paymentID");
+    if (!order) return res.status(404).json({ message: "Không tìm thấy đơn." });
+
+    res.json({
+      orderId: order._id,
+      orderStatus: order.orderStatus,
+      payment: order.paymentID
+        ? {
+            paymentId: order.paymentID._id,
+            method: order.paymentID.paymentMethod,
+            status: order.paymentID.status,
+            isPaid: order.paymentID.isPaid,
+            amount: order.paymentID.amount
+          }
+        : null
+    });
+  } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });

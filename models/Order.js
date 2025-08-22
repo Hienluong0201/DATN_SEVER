@@ -75,7 +75,8 @@ const OrderSchema = new Schema({
     ref: 'Voucher',
     default: null
   },
-  cancellationReason: { type: String, default: "" }
+  cancellationReason: { type: String, default: "" },
+  txnRef: { type: String },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Order', OrderSchema);
