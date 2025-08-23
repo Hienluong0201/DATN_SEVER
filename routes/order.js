@@ -40,10 +40,10 @@ function sortObject(obj) {
 }
 
 // Chạy mỗi 15 phút
-cron.schedule('*/15 * * * *', async () => {
-  console.log('[CRON] Đang kiểm tra và huỷ các đơn pending quá 15 phút...');
+cron.schedule('* * * * *', async () => {
+  console.log('[CRON] Đang kiểm tra và huỷ các đơn pending quá 1 phút...');
   const now = Date.now();
-  const FIFTEEN_MIN = 15 * 60 * 1000;
+  const FIFTEEN_MIN = 1 * 60 * 1000;
 
   let orders = await Order.find({ orderStatus: "pending" }).populate("paymentID");
   const includedMethods = ["ZaloPay", "Stripe", "VNPAY"];
@@ -66,11 +66,12 @@ cron.schedule('*/15 * * * *', async () => {
           item.variantID,
           { $inc: { stock: item.quantity } }
         );
-      }
+      } 
     }
-    console.log(`[CRON] Đã huỷ đơn hàng #${order._id} do pending quá 15 phút!`);
+    console.log(`[CRON] Đã huỷ đơn hàng #${order._id} do pending quá 1 phút!`);
   }
 });
+
 
 
 // === STRIPE ===
@@ -547,8 +548,8 @@ router.post("/checkout", async (req, res) => {
       if (voucher.usedCount >= voucher.usageLimit) voucher.isActive = false;
       await voucher.save({ session });
     }
-
-    const finalTotal = Math.max(0, totalAmount - discountAmount) + 30000;
+    const shippingFee = 30000;
+    const finalTotal = Math.max(0, totalAmount - discountAmount) +  shippingFee;
 
     // === MỚI: Check & giữ chỗ tồn kho (atomic) ngay sau voucher ===
     for (const { variantID, quantity } of items) {
@@ -583,6 +584,7 @@ router.post("/checkout", async (req, res) => {
       totalAmount,
       discountAmount,
       finalTotal,
+      shippingFee,  
       voucher:        voucherId,
       orderDate:      new Date()
     }], { session });
