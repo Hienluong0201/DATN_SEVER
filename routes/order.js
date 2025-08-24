@@ -16,7 +16,7 @@ require('dotenv').config();
 const Stripe = require("stripe");
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const cron = require('node-cron');
-
+const Wallet = require("../models/Wallet");
 // === VNPAY CONFIG ===
 const vnp_TmnCode    = process.env.VNP_TMNCODE    || "GH0YA7ZW";
 const vnp_HashSecret = process.env.VNP_HASHSECRET || "5YN1GMQMI6WTPMBTT5883CIVTF2K58XR";
@@ -408,6 +408,75 @@ router.get("/unpaid-gateway-orders", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+/**
+ * POST /order/:id/pay-with-wallet
+ * Thanh toán đơn hàng bằng số dư ví
+ */
+router.post("/:id/pay-with-wallet", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { userID } = req.body;
+    const order = await Order.findById(req.params.id).populate("paymentID").session(session);
+
+    if (!order) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "Không tìm thấy đơn hàng." });
+    }
+
+    if (order.orderStatus !== "pending") {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ message: "Đơn hàng không ở trạng thái pending." });
+    }
+
+    // Tìm ví của user
+    const wallet = await Wallet.findOne({ userID }).session(session);
+    if (!wallet) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "Không tìm thấy ví của người dùng." });
+    }
+
+    if (wallet.balance < order.finalTotal) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ message: "Số dư không đủ để thanh toán đơn hàng." });
+    }
+
+    // Trừ tiền trong ví
+    wallet.balance -= order.finalTotal;
+    wallet.transactions.push({
+      paymentID: order.paymentID?._id || null,
+      type: "withdraw",
+      amount: order.finalTotal
+    });
+    await wallet.save({ session });
+
+    // Cập nhật trạng thái payment
+    if (order.paymentID) {
+      order.paymentID.paymentMethod = "WALLET";
+      order.paymentID.status = "paid";
+      order.paymentID.isPaid = true;
+      await order.paymentID.save({ session });
+    }
+
+    // Cập nhật trạng thái order
+    order.orderStatus = "paid";
+    await order.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.json({ message: "Thanh toán bằng ví thành công.", balance: wallet.balance, order });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({ message: err.message });
+  }
+});
 
 
 // GET /order/:id
@@ -626,15 +695,15 @@ router.post("/checkout", async (req, res) => {
 // PUT /order/:id
 // → Cập nhật trạng thái đơn; nếu hủy thì hoàn tác tồn kho
 // PUT /order/:id
-// → Cập nhật trạng thái đơn; nếu hủy thì hoàn tác tồn kho và lưu lý do hủy
 router.put("/:id", async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    // Tìm đơn hàng và populate userID để lấy email
     const order = await Order.findById(req.params.id)
       .populate("userID", "email")
+      .populate("paymentID")
       .session(session);
+
     if (!order) {
       await session.abortTransaction();
       session.endSession();
@@ -644,7 +713,7 @@ router.put("/:id", async (req, res) => {
     const oldStatus = order.orderStatus;
     const { orderStatus, cancellationReason } = req.body;
 
-    // Kiểm tra trạng thái hợp lệ
+    // ✅ chỉ nhận các trạng thái hợp lệ
     const validStatuses = ["pending", "paid", "shipped", "delivered", "cancelled"];
     if (orderStatus && !validStatuses.includes(orderStatus)) {
       await session.abortTransaction();
@@ -652,8 +721,8 @@ router.put("/:id", async (req, res) => {
       return res.status(400).json({ message: "Trạng thái không hợp lệ." });
     }
 
-    // Kiểm tra lý do hủy nếu trạng thái mới là cancelled
-    if (orderStatus === "cancelled" && (!cancellationReason || typeof cancellationReason !== "string" || cancellationReason.trim() === "")) {
+    // ✅ nếu hủy thì phải có lý do
+    if (orderStatus === "cancelled" && (!cancellationReason || !cancellationReason.trim())) {
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({ message: "Vui lòng cung cấp lý do hủy." });
@@ -662,9 +731,11 @@ router.put("/:id", async (req, res) => {
     if (orderStatus && orderStatus !== oldStatus) {
       order.orderStatus = orderStatus;
 
-      // Nếu chuyển sang hủy, hoàn kho và lưu lý do
+      // ====== 🔥 xử lý khi HỦY ======
       if (orderStatus === "cancelled" && oldStatus !== "cancelled") {
         order.cancellationReason = cancellationReason.trim();
+
+        // Hoàn lại stock
         for (const item of order.items) {
           await ProductVariant.findByIdAndUpdate(
             item.variantID,
@@ -672,12 +743,43 @@ router.put("/:id", async (req, res) => {
             { session }
           );
         }
+
+        // 🔥 Nếu đơn đã thanh toán → hoàn tiền vào ví
+        if (oldStatus === "paid" || (order.paymentID && order.paymentID.isPaid)) {
+          let wallet = await Wallet.findOne({ userID: order.userID._id }).session(session);
+
+          // Nếu chưa có ví thì tạo mới
+          if (!wallet) {
+            wallet = new Wallet({
+              userID: order.userID._id,
+              balance: 0,
+              transactions: []
+            });
+          }
+
+          // Cộng tiền lại vào ví
+          wallet.balance += order.finalTotal;
+          wallet.transactions.push({
+            paymentID: order.paymentID?._id || null,
+            type: "deposit",
+            amount: order.finalTotal,
+            date: new Date()
+          });
+
+          await wallet.save({ session });
+
+          // Cập nhật payment là refunded
+          if (order.paymentID) {
+            order.paymentID.status = "refunded";
+            order.paymentID.isPaid = false;
+            await order.paymentID.save({ session });
+          }
+        }
       }
 
-      // Lưu đơn hàng
+      // Lưu order
       await order.save({ session });
-
-      // Ánh xạ trạng thái sang tiếng Việt
+     // Ánh xạ trạng thái sang tiếng Việt
       const statusMessages = {
         pending: "Đơn hàng của bạn đang chờ xử lý. Chúng tôi sẽ sớm liên hệ để xác nhận.",
         paid: "Đơn hàng của bạn đã được thanh toán. Chúng tôi đang chuẩn bị hàng.",
@@ -760,6 +862,7 @@ router.put("/:id", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
 
 // DELETE /order/:id
 // → Xóa 1 order
