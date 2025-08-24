@@ -30,6 +30,7 @@ const videoRouter = require('./routes/video');
 var statisticsRoter = require('./routes/revenuestat');
 var voucherRouter = require('./routes/voucher');
 var voucherRouterDetail = require('./routes/voucherDetail')
+const walletRoutes = require('./routes/wallet');
 
 
 var app = express();
@@ -84,6 +85,7 @@ app.use('/statistics',statisticsRoter);
 app.use('/voucher',voucherRouter);
 app.use('/voucherDetail',voucherRouterDetail);
 app.use('/api/push', require('./routes/push'));
+app.use('/api/v1/wallet', walletRoutes);
 // catch 404 and forward to error handler
 app.use(function(req, res, next) { 
   next(createError(404));
