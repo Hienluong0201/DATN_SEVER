@@ -305,6 +305,126 @@ router.patch("/:id/status", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+function mapCategoryToGroup(name) {
+  name = name.toLowerCase();
+  if (name.includes("áo sơ mi") || name.includes("áo thun") || name.includes("áo polo")) {
+    return "tops";
+  }
+  if (name.includes("quần dài") || name.includes("quần đùi") || name.includes("quần")) {
+    return "bottoms";
+  }
+  if (name.includes("áo khoác") || name.includes("jacket") || name.includes("blazer")) {
+    return "outers";
+  }
+  if (name.includes("váy") || name.includes("dress")) {
+    return "dress";
+  }
+  if (name.includes("phụ kiện") || name.includes("accessories")) {
+    return "accessories";
+  }
+  return null;
+}
 
+router.get("/suggest-outfit/:productID", async (req, res) => {
+  try {
+    const { productID } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(productID)) {
+      return res.status(400).json({ message: "productID không hợp lệ." });
+    }
+
+    // lấy sản phẩm gốc + ảnh
+    const baseProduct = await Product.findById(productID).populate("categoryID");
+    if (!baseProduct) return res.status(404).json({ message: "Không tìm thấy sản phẩm." });
+
+    // lấy ảnh cho base
+    const baseImages = await Image.findOne({ productID: baseProduct._id });
+
+    const group = mapCategoryToGroup(baseProduct.categoryID.name);
+    let suggestions = {};
+
+    // rule cho từng group
+    if (group === "tops") {
+      const bottoms = await Product.find()
+        .populate("categoryID")
+        .where("categoryID").in(await getCategoryIdsByGroup("bottoms"));
+      const outers = await Product.find()
+        .populate("categoryID")
+        .where("categoryID").in(await getCategoryIdsByGroup("outers"));
+
+      suggestions = { 
+        bottoms: await attachImages(randomPick(bottoms, 3)), 
+        outers: await attachImages(randomPick(outers, 3)) 
+      };
+    }
+
+    if (group === "bottoms") {
+      const tops = await Product.find()
+        .populate("categoryID")
+        .where("categoryID").in(await getCategoryIdsByGroup("tops"));
+      const outers = await Product.find()
+        .populate("categoryID")
+        .where("categoryID").in(await getCategoryIdsByGroup("outers"));
+
+      suggestions = { 
+        tops: await attachImages(randomPick(tops, 3)), 
+        outers: await attachImages(randomPick(outers, 3)) 
+      };
+    }
+
+    if (group === "dress") {
+      const outers = await Product.find()
+        .populate("categoryID")
+        .where("categoryID").in(await getCategoryIdsByGroup("outers"));
+      const accessories = await Product.find()
+        .populate("categoryID")
+        .where("categoryID").in(await getCategoryIdsByGroup("accessories"));
+
+      suggestions = { 
+        outers: await attachImages(randomPick(outers, 3)), 
+        accessories: await attachImages(randomPick(accessories, 3)) 
+      };
+    }
+
+    return res.json({ 
+      base: { ...baseProduct.toObject(), images: baseImages?.imageURL || [] },
+      suggestions 
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// helper: gắn ảnh vào product
+async function attachImages(products) {
+  const results = [];
+  for (let p of products) {
+    const imgs = await Image.findOne({ productID: p._id });
+    results.push({
+      ...p.toObject(),
+      images: imgs?.imageURL || []
+    });
+  }
+  return results;
+}
+
+async function getCategoryIdsByGroup(group) {
+  const mapping = {
+    tops: ["Áo Sơ Mi", "Áo Thun", "Áo Polo"],
+    bottoms: ["Quần Dài", "Quần Đùi"],
+    outers: ["Áo Khoác"],
+    dress: ["Váy"],
+    accessories: ["Phụ Kiện"]
+  };
+  const cats = await Category.find({ name: { $in: mapping[group] } });
+  return cats.map(c => c._id);
+}
+
+// Helper: random pick N phần tử
+function randomPick(arr, n) {
+  if (!arr || arr.length === 0) return [];
+  return arr.sort(() => 0.5 - Math.random()).slice(0, n);
+}
 
 module.exports = router;
