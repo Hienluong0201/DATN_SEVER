@@ -334,21 +334,20 @@ router.get("/suggest-outfit/:productID", async (req, res) => {
     }
 
     // lấy sản phẩm gốc + ảnh
-    const baseProduct = await Product.findById(productID).populate("categoryID");
+    const baseProduct = await Product.findOne({ _id: productID, status: true })
+      .populate("categoryID");
     if (!baseProduct) return res.status(404).json({ message: "Không tìm thấy sản phẩm." });
 
-    // lấy ảnh cho base
     const baseImages = await Image.findOne({ productID: baseProduct._id });
 
     const group = mapCategoryToGroup(baseProduct.categoryID.name);
     let suggestions = {};
 
-    // rule cho từng group
     if (group === "tops") {
-      const bottoms = await Product.find()
+      const bottoms = await Product.find({ status: true })
         .populate("categoryID")
         .where("categoryID").in(await getCategoryIdsByGroup("bottoms"));
-      const outers = await Product.find()
+      const outers = await Product.find({ status: true })
         .populate("categoryID")
         .where("categoryID").in(await getCategoryIdsByGroup("outers"));
 
@@ -359,10 +358,10 @@ router.get("/suggest-outfit/:productID", async (req, res) => {
     }
 
     if (group === "bottoms") {
-      const tops = await Product.find()
+      const tops = await Product.find({ status: true })
         .populate("categoryID")
         .where("categoryID").in(await getCategoryIdsByGroup("tops"));
-      const outers = await Product.find()
+      const outers = await Product.find({ status: true })
         .populate("categoryID")
         .where("categoryID").in(await getCategoryIdsByGroup("outers"));
 
@@ -373,10 +372,10 @@ router.get("/suggest-outfit/:productID", async (req, res) => {
     }
 
     if (group === "dress") {
-      const outers = await Product.find()
+      const outers = await Product.find({ status: true })
         .populate("categoryID")
         .where("categoryID").in(await getCategoryIdsByGroup("outers"));
-      const accessories = await Product.find()
+      const accessories = await Product.find({ status: true })
         .populate("categoryID")
         .where("categoryID").in(await getCategoryIdsByGroup("accessories"));
 
@@ -408,6 +407,7 @@ async function attachImages(products) {
   }
   return results;
 }
+
 
 async function getCategoryIdsByGroup(group) {
   const mapping = {
