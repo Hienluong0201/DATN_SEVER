@@ -128,4 +128,31 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+// Cập nhật trạng thái (status) của biến thể
+// Ẩn/Hiện biến thể (toggle status)
+router.patch("/:id/status", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "ID không hợp lệ." });
+    }
+
+    const variant = await ProductVariant.findById(id);
+    if (!variant) {
+      return res.status(404).json({ message: "Không tìm thấy biến thể." });
+    }
+
+    // Đảo trạng thái (true -> false, false -> true)
+    variant.status = !variant.status;
+    const updated = await variant.save();
+
+    res.json({
+      message: "Cập nhật trạng thái thành công.",
+      variant: updated
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;
