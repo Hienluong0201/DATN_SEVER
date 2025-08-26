@@ -99,6 +99,7 @@ router.put('/:id/view', async (req, res) => {
 });
 
 // DELETE /api/v1/videos/:id (xóa video)
+// DELETE /api/v1/videos/:id
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -107,9 +108,9 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy video.' });
     }
 
-    // Xóa video trên Cloudinary nếu cần
-    const publicId = video.videoURL.split('/').pop().split('.')[0];
-    await cloudinary.uploader.destroy(`upload_videos/${publicId}`, { resource_type: 'video' });
+    // ❌ Bỏ đoạn này đi
+    // const publicId = video.videoURL.split('/').pop().split('.')[0];
+    // await cloudinary.uploader.destroy(`upload_videos/${publicId}`, { resource_type: 'video' });
 
     res.json({ message: 'Xóa video thành công.' });
   } catch (err) {
